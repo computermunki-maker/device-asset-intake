@@ -104,7 +104,7 @@ input[type=file]{display:none}
     <button class="btn primary" id="liveBtn" type="button" hidden>Live scan</button>
     <button class="btn" id="photoBtn" type="button">Photo of label</button>
     <input type="file" id="photo" accept="image/*" capture="environment" multiple>
-    <input type="file" id="listFile" accept=".csv,.txt,text/plain,text/csv">
+    <input type="file" id="listFile" accept=".csv,.txt,.xlsx,.xls,text/plain,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
   </div>
   <div class="status" id="status" role="status" aria-live="polite">Ready. Scanner input goes into the box above.</div>
 </div></header>
@@ -129,7 +129,7 @@ input[type=file]{display:none}
     <div class="toolbar">
       <div class="count" id="count">0<small>devices</small></div>
       <button class="btn" id="modelBtn" type="button" hidden>Fill model names</button>
-      <button class="btn" id="importBtn" type="button" title="Import a scan history exported from a phone barcode app (.csv or .txt)">Import list</button>
+      <button class="btn" id="importBtn" type="button" title="Import a list exported from this page (.xlsx or .csv), or a scan history from a phone barcode app">Import list</button>
       <button class="btn" id="copyBtn" type="button">Copy for Excel</button>
       <button class="btn" id="csvBtn" type="button">CSV</button>
       <button class="btn primary" id="xlsxBtn" type="button">Export .xlsx</button>
@@ -157,7 +157,7 @@ input[type=file]{display:none}
       <li><b>Hardware scanner</b> (keyboard wedge, USB or Bluetooth): the badge at the top must say <b>Ready to scan</b>. If it says paused, tap the scan box; inside the Claude app, keystrokes go to the chat box until you click the page. Scanners that end with Enter, Tab or nothing at all are all accepted. Multi-line QR payloads are captured whole, so labels that encode several fields on separate lines still land as one row.</li>
       <li><b>Phone or webcam</b>: <b>Live scan</b> opens the camera and adds each new code it sees, with a buzz and a green frame. It appears in the downloaded page when opened over https or from the PC's own disk; Claude's viewer does not allow live camera use, so inside Claude use <b>Photo of label</b> (several photos can be picked at once).</li>
       <li>Understood formats: vendor support URLs (HP <code>?serialnumber=</code>, Dell <code>qrl.dell.com/&lt;tag&gt;</code>, Lenovo <code>pcsupport</code>), Lenovo <code>1S&lt;MTM&gt;&lt;serial&gt;</code> codes, ANSI/ISO box labels (<code>S</code> serial, <code>1P</code> part), GS1 <code>(21)</code> serials, labelled text (<code>S/N</code>, <code>Service Tag</code>, <code>MTM</code>, <code>P/N</code>, <code>VFY:</code>, <code>IMEI</code>, <code>MAC</code>), Apple part numbers (<code>…/A</code>), Samsung model codes, and HP's comma-separated QR (<code>serial,product,model,1y1y0y</code>, where the last part is years of parts/labour/on-site warranty) and HP box QR links (<code>hpsmart.com/QRC/…/21/&lt;serial&gt;?240=&lt;part&gt;</code>).</li>
-      <li><b>Phone barcode apps</b>: apps that type into the PC (keyboard mode, e.g. Barcode to PC) work like a USB scanner. For apps that keep a scan history, export or share it as .csv or .txt and use <b>Import list</b>, or paste the list onto the page: each line becomes its own device.</li>
+      <li><b>Phone barcode apps</b>: apps that type into the PC (keyboard mode, e.g. Barcode to PC) work like a USB scanner. For apps that keep a scan history, export or share it as .csv or .txt and use <b>Import list</b>. Import list also reloads a list exported from this page (.xlsx or .csv), adding new devices and filling gaps in existing ones, or paste the list onto the page: each line becomes its own device.</li>
       <li><b>Etched codes</b> (laser-marked Data Matrix or QR on metal or dark plastic): a photo gets a slower second attempt with contrast boosted, which often works for etched QR codes. Etched Data Matrix codes on brushed metal are rarely readable from a photo; use a USB or Bluetooth 2D scanner for those.</li>
       <li><b>Labels with several barcodes</b> (S/N, P/N, MAC): a photo reads them all at once. Scanned one by one, start each device with its <b>serial</b>; the P/N, MAC and locale barcodes that follow join that row for two minutes. Other barcodes on labels and boxes (tracking, Box ID, SO, PO, shipment, UPC) are ignored, and HP spare/SSA numbers go to Notes. Scanning another label for a device already in the list fills its empty fields. The retail UPC/EAN box barcode is ignored because it does not identify the device. Make is detected from the URL, label text or serial pattern; a lone 7-character code is taken as a Dell service tag. Raw text is kept in the export.</li>
       <li>Duplicate serials are not added again; the existing row is highlighted instead.</li>
@@ -278,7 +278,7 @@ function parse(raw){
     if(!o.serial&&tok.length===11&&tok[0]==='S'&&HP_SN.test(tok.slice(1))){setS(tok.slice(1));continue;}
     if(!o.serial&&HP_SN.test(tok)){setS(tok);o.make||='HP';continue;}
     if(!o.serial&&LEN_SN.test(tok)){setS(tok);o.make||='Lenovo';continue;}
-    if(!o.product&&HP_PN.test(tok)&&tok!==o.serial){setP(tok);o.make||='HP';continue;}
+    if(HP_PN.test(tok)&&tok!==o.serial&&(!o.product||(!o.product.includes('#')&&tok.includes('#')&&HP_PN.test(o.product)))){o.product=tok;o.make||='HP';continue;}
     if(!o.product&&LEN_MTM.test(tok)&&o.make==='Lenovo'&&tok!==o.serial){setP(tok);continue;}
   }
   if(!o.serial){ const c=toks.map(s=>s.replace(/[:\-]/g,'')).filter(s=>!/^(1P|30P|1S)/.test(s)&&serialish(s)&&s!==o.product&&s!==o.product.replace(/[:\-\/]/g,'')&&s!==o.imei&&!/^HTTP/.test(s));
@@ -474,9 +474,53 @@ document.addEventListener('click',e=>{ if(!editable(e.target)&&!e.target.closest
 $('#photoBtn').addEventListener('click',()=>$('#photo').click());
 $('#importBtn').addEventListener('click',()=>$('#listFile').click());
 $('#listFile').addEventListener('change',async e=>{ const f=e.target.files[0]; e.target.value=''; if(!f) return;
-  try{ const t=await f.text(); const n=t.split(/\r?\n/).filter(l=>l.trim()).length; if(n<2){ ingest(t,'import'); return; }
-    const before=rows.length; ingestMany(t,'import'); if(rows.length===before&&!/lines read/.test(statusEl.textContent)) t.split(/\r?\n/).forEach(l=>l.trim()&&ingest(l,'import'));
-  }catch(x){ say('Could not read '+f.name+'.','bad'); } });
+  try{
+    let table;
+    if(/\.xlsx?$/i.test(f.name)){
+      if(typeof XLSX==='undefined'){ say('The Excel reader did not load. Export as CSV and import that instead.','bad'); return; }
+      const wb=XLSX.read(await f.arrayBuffer(),{type:'array'}); const sh=wb.Sheets['Devices']||wb.Sheets[wb.SheetNames[0]];
+      table=XLSX.utils.sheet_to_json(sh,{header:1,defval:'',raw:false});
+    } else table=parseCSV(await f.text());
+    importTable(table,f.name);
+  }catch(x){ say('Could not read '+f.name+': '+(x&&x.message||x),'bad'); } });
+// RFC 4180 CSV: quoted fields may contain commas and line breaks
+function parseCSV(t){ t=t.replace(/^﻿/,''); const out=[]; let row=[], f='', q=false;
+  for(let i=0;i<t.length;i++){ const c=t[i];
+    if(q){ if(c==='"'){ if(t[i+1]==='"'){f+='"';i++;} else q=false; } else f+=c; }
+    else if(c==='"') q=true; else if(c===','||c==='\t'&&!t.slice(0,200).includes(',')){ row.push(f); f=''; }
+    else if(c==='\n'||c==='\r'){ if(c==='\r'&&t[i+1]==='\n') i++; row.push(f); out.push(row); row=[]; f=''; }
+    else f+=c; }
+  if(f||row.length){ row.push(f); out.push(row); }
+  return out.filter(r=>r.some(v=>String(v).trim())); }
+const IMPORT_COLS=[['make',/^(make|manufacturer|vendor|brand)$/i],['serial',/serial|^s\/?n$|service ?tag/i],['product',/part|mtm|product ?(no|number|#)|^p\/?n$|sku/i],
+  ['model',/^model( name)?$/i],['built',/^built/i],['warranty',/^warranty/i],['mac',/^mac/i],['asset',/asset/i],['site',/^(site|school)/i],['room',/^(room|location)/i],
+  ['tag',/group ?tag/i],['po',/^po\b|order/i],['notes',/^notes?$/i],['raw',/^raw|content|barcode|^text$|^data$/i]];
+function importTable(tb,name){
+  if(!tb.length){ say(name+' is empty.','warn'); return; }
+  const head=tb[0].map(h=>String(h).trim()), map={};
+  head.forEach((h,i)=>{ for(const [k,re] of IMPORT_COLS) if(!(k in map)&&re.test(h)){ map[k]=i; break; } });
+  // A device list (this page's export, or any sheet with a serial column): restore rows directly
+  if('serial' in map&&(('product' in map)||('make' in map)||('mac' in map))){
+    const c={added:0,updated:0,dup:0,skipped:0};
+    tb.slice(1).forEach(r=>{ const v=k=>k in map?String(r[map[k]]??'').trim():'';
+      const serial=v('serial').toUpperCase(); if(!serial){ c.skipped++; return; }
+      let model=v('model'), ai=false; if(/\s\(AI\)$/.test(model)){ model=model.replace(/\s\(AI\)$/,''); ai=true; }
+      const rec={make:v('make'),serial,product:v('product').toUpperCase(),model,modelAi:ai,built:v('built'),warranty:v('warranty'),mac:v('mac')?fmtMac(v('mac')):'',
+        asset:v('asset'),site:v('site'),room:v('room'),tag:v('tag'),po:v('po'),notes:v('notes'),raw:v('raw')};
+      const ex=rows.find(x=>x.serial===serial);
+      if(ex){ const patch={}; for(const k in rec) if(rec[k]&&!ex[k]&&k!=='modelAi'){ patch[k]=rec[k]; if(k==='model') patch.modelAi=ai; }
+        if(Object.keys(patch).length){ store.update(ex.id,patch); c.updated++; } else c.dup++; return; }
+      if(!rec.built) rec.built=buildEst(serial,rec.make);
+      store.add(Object.assign({id:'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),ts:Date.now(),snWeak:false,source:'import'},rec)); c.added++; });
+    render(); say('Imported '+name+': '+c.added+' added, '+c.updated+' updated, '+c.dup+' already in the list'+(c.skipped?', '+c.skipped+' rows without a serial skipped':''),'ok'); return;
+  }
+  // A scan history from a phone app: use the barcode/content column if there is one, else every cell
+  const body=('raw' in map)?tb.slice(1).map(r=>String(r[map.raw]??'')):tb.map(r=>r.join(' '));
+  const text=body.map(x=>x.replace(/\r?\n/g,' ').trim()).filter(Boolean).join('\n');
+  if(!text){ say('No scans found in '+name+'.','warn'); return; }
+  const before=rows.length; ingestMany(text,'import');
+  if(rows.length===before&&!/lines read/.test(statusEl.textContent)) text.split('\n').forEach(l=>ingest(l,'import'));
+}
 
 /* ---------- live camera scanning (standalone page over https or from disk; Claude's viewer blocks the camera) ---------- */
 const inClaude=!!window.claude;
