@@ -154,7 +154,9 @@ input[type=file]{display:none}
     <ul>
       <li><b>Hardware scanner</b> (keyboard wedge, USB or Bluetooth): the badge at the top must say <b>Ready to scan</b>. If it says paused, tap the scan box; inside the Claude app, keystrokes go to the chat box until you click the page. Scanners that end with Enter, Tab or nothing at all are all accepted. Multi-line QR payloads are captured whole, so labels that encode several fields on separate lines still land as one row.</li>
       <li><b>Phone or webcam</b>: <b>Live scan</b> opens the camera and adds each new code it sees, with a buzz and a green frame. It appears in the downloaded page when opened over https or from the PC's own disk; Claude's viewer does not allow live camera use, so inside Claude use <b>Photo of label</b> (several photos can be picked at once).</li>
-      <li>Understood formats: vendor support URLs (HP <code>?serialnumber=</code>, Dell <code>qrl.dell.com/&lt;tag&gt;</code>, Lenovo <code>pcsupport</code>), Lenovo <code>1S&lt;MTM&gt;&lt;serial&gt;</code> codes, ANSI/ISO box labels (<code>S</code> serial, <code>1P</code> part), GS1 <code>(21)</code> serials, labelled text (<code>S/N</code>, <code>Service Tag</code>, <code>MTM</code>, <code>P/N</code>, <code>VFY:</code>, <code>IMEI</code>, <code>MAC</code>), Apple part numbers (<code>…/A</code>), Samsung model codes, and HP's comma-separated QR (<code>serial,product,model,1y1y0y</code>, where the last part is years of parts/labour/on-site warranty). Make is detected from the URL, label text or serial pattern; a lone 7-character code is taken as a Dell service tag. Raw text is kept in the export.</li>
+      <li>Understood formats: vendor support URLs (HP <code>?serialnumber=</code>, Dell <code>qrl.dell.com/&lt;tag&gt;</code>, Lenovo <code>pcsupport</code>), Lenovo <code>1S&lt;MTM&gt;&lt;serial&gt;</code> codes, ANSI/ISO box labels (<code>S</code> serial, <code>1P</code> part), GS1 <code>(21)</code> serials, labelled text (<code>S/N</code>, <code>Service Tag</code>, <code>MTM</code>, <code>P/N</code>, <code>VFY:</code>, <code>IMEI</code>, <code>MAC</code>), Apple part numbers (<code>…/A</code>), Samsung model codes, and HP's comma-separated QR (<code>serial,product,model,1y1y0y</code>, where the last part is years of parts/labour/on-site warranty) and HP box QR links (<code>hpsmart.com/QRC/…/21/&lt;serial&gt;?240=&lt;part&gt;</code>).</li>
+      <li><b>Etched codes</b> (laser-marked Data Matrix or QR on metal or dark plastic): a photo gets a slower second attempt with contrast boosted, which often works for etched QR codes. Etched Data Matrix codes on brushed metal are rarely readable from a photo; use a USB or Bluetooth 2D scanner for those.</li>
+      <li><b>Labels with several barcodes</b> (S/N, P/N, MAC): a photo reads them all at once. Scanned one by one, the P/N and MAC join the row started by the S/N within a minute. Scanning another label for a device already in the list fills its empty fields. The retail UPC/EAN box barcode is ignored because it does not identify the device. Make is detected from the URL, label text or serial pattern; a lone 7-character code is taken as a Dell service tag. Raw text is kept in the export.</li>
       <li>Duplicate serials are not added again; the existing row is highlighted instead.</li>
       <li><b>Built (est.)</b> is filled for HP serials only, decoded from characters 4–6 (year digit + week), and is an estimate. <b>Fill model names</b> asks Claude to name the model from the make and part number; those values are marked <span class="ai">AI</span> and should be checked before they go into an asset register.</li>
       <li>Rows save to your account when signed in, so you can scan on a phone and export on a laptop.</li>
@@ -163,6 +165,7 @@ input[type=file]{display:none}
 </div></main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 (function(){
@@ -171,7 +174,7 @@ const statusEl=$('#status'), scanEl=$('#scan');
 function say(msg,kind){statusEl.textContent=msg;statusEl.className='status'+(kind?' '+kind:'');}
 
 /* ---------- parsing ---------- */
-const MAKES=[['HP',/\bHP\b|hp\.com|hewlett/i],['Dell',/dell/i],['Lenovo',/lenovo|thinkpad|thinkcentre/i],['Fujitsu',/fujitsu|\bfsc\b/i],
+const MAKES=[['HP',/\bHP\b|hp\.com|hpsmart|hewlett/i],['Dell',/dell/i],['Lenovo',/lenovo|thinkpad|thinkcentre/i],['Fujitsu',/fujitsu|\bfsc\b/i],
   ['Apple',/apple|macbook|\bimac\b/i],['Samsung',/samsung/i],['Microsoft',/microsoft|surface/i],['Acer',/\bacer\b/i],['ASUS',/\basus\b/i],
   ['Dynabook',/dynabook|toshiba/i],['Panasonic',/panasonic|toughbook/i],['Getac',/getac/i],['Google',/chromebook|google/i]];
 const HP_SN=/^(5C[A-Z]|CN[A-Z0-9]|CZC|MXL|2U[A-Z]|8C[A-Z]|4C[A-Z]|3C[A-Z]|1H[A-Z]|SGH|USH|TRF|MXM)[A-Z0-9]{7}$/;
@@ -188,7 +191,9 @@ function serialish(s){return /^[A-Z0-9]{6,22}$/.test(s)&&(mixed(s)||/^\d{10,14}$
 
 function parse(raw){
   const t=(raw||'').replace(/\r/g,'').trim();
-  const o={make:'',serial:'',product:'',model:'',mac:'',imei:'',warranty:''};
+  const o={make:'',serial:'',product:'',model:'',mac:'',mac2:'',imei:'',warranty:'',gtin:''};
+  // A bare 12-14 digit code with a valid check digit is the retail box barcode (UPC/EAN), not a device id
+  if(/^\d{12,14}$/.test(t)&&gtinOk(t)){ o.gtin=t; return o; }
   const setP=v=>{if(v&&!o.product)o.product=v;}, setS=v=>{if(v&&!o.serial)o.serial=v;};
   for(const [n,re] of MAKES){ if(re.test(t)){o.make=n;break;} }
 
@@ -207,10 +212,17 @@ function parse(raw){
   if(url){
     const qi=url.indexOf('?'); const base=qi<0?url:url.slice(0,qi); const q=qi<0?'':url.slice(qi+1).replace(/#(?![A-Z0-9]{3}(&|$))/i,'&');
     for(const p of q.split('&')){ const i=p.indexOf('='); if(i<1) continue;
+      const rk=p.slice(0,i);
+      if(rk==='21'){ setS(cleanTok(decodeURIComponent(p.slice(i+1)))); continue; }
+      if(rk==='240'||rk==='241'){ setP(cleanTok(decodeURIComponent(p.slice(i+1)))); continue; }
       let k,v; try{k=decodeURIComponent(p.slice(0,i)).toLowerCase().replace(/[^a-z]/g,''); v=decodeURIComponent(p.slice(i+1).replace(/\+/g,' '));}catch(e){continue;}
       if(SER_KEYS.test(k)) setS(cleanTok(v)); else if(PRD_KEYS.test(k)) setP(cleanTok(v));
       else if(/model|productname|name/.test(k)&&!o.model) o.model=v.trim();
       else if(/mac/.test(k)&&!o.mac) o.mac=v.trim(); }
+    // GS1 Digital Link paths (HP hpsmart.com/QRC/…/01/<GTIN>/21/<serial>)
+    { const sg=base.replace(/^https?:\/\/[^/]+/i,'').split('/').filter(Boolean);
+      for(let i=0;i<sg.length-1;i++){ let v; try{v=decodeURIComponent(sg[i+1]);}catch(e){continue;}
+        if(sg[i]==='21') setS(cleanTok(v)); else if(sg[i]==='240'||sg[i]==='241') setP(cleanTok(v)); else if(sg[i]==='01'&&/^\d{8,14}$/.test(v)) o.gtin=v; } }
     if(!o.serial){ const segs=base.replace(/^https?:\/\/[^/]+/i,'').split('/').filter(Boolean);
       for(let i=0;i<segs.length;i++){ const s=segs[i].toUpperCase();
         if(/^(servicetag|serial|sn|serialnumber)$/i.test(segs[i])&&segs[i+1]){setS(cleanTok(segs[i+1]));break;}
@@ -241,14 +253,17 @@ function parse(raw){
   // Patterns found anywhere in the text
   const U=t.toUpperCase();
   let x;
-  if(!o.mac&&(x=U.match(MAC_RE))) o.mac=x[1];
+  { const ms=[...U.matchAll(new RegExp(MAC_RE.source,'g'))].map(z=>z[1]); if(!o.mac&&ms[0]) o.mac=ms[0]; const m2=ms.find(z=>z.replace(/\W/g,'')!==o.mac.toUpperCase().replace(/\W/g,'')); if(m2) o.mac2=m2; }
   if(!o.imei&&(x=U.match(/\b(\d{15})\b/))&&/IMEI/i.test(t)) o.imei=x[1];
   if(!o.product&&(x=U.match(/\b([MZ][A-Z0-9]{3,4}[A-Z]{0,2}\d?[A-Z]{0,2}\/A)\b/))){o.product=x[1];o.make||='Apple';}
   if(!o.product&&(x=U.match(/\b(NP\d{3}[A-Z0-9]{2,4}-[A-Z0-9]{3,7}|SM-[A-Z]\d{3}[A-Z0-9]{0,4})\b/))){o.product=x[1];o.make||='Samsung';}
   if(!o.product&&(x=U.match(/\b((?:VFY|LKN):[A-Z0-9\-]{5,})\b/))){o.product=x[1];o.make||='Fujitsu';}
 
+  // HP component labels: P/N and SPS spare numbers like L13899-001
+  { const sp=[...U.matchAll(/\b([A-Z0-9]\d{5}-\d{3})\b/g)].map(z=>z[1]); if(sp.length){ setP(sp[0]); if(sp[1]&&sp[1]!==o.product) o.sps=sp[1]; o.make||='HP'; } }
+  if(!o.mac&&(x=U.match(/\bMAC[:\s\-]*([0-9A-F]{12})\b/))) o.mac=x[1];
   // Bare tokens
-  const toks=U.split(/[\s,;|\\]+/).map(s=>s.replace(/^[^A-Z0-9]+|[^A-Z0-9#]+$/g,'')).filter(Boolean);
+  const toks=U.split(/[\s,;|\\]+/).map(s=>s.replace(/^[^A-Z0-9]+|[^A-Z0-9#]+$/g,'')).filter(s=>s&&!/^[A-Z0-9]\d{5}-\d{3}$/.test(s)&&!/^MAC[0-9A-F]{12}$/.test(s));
   for(const tok0 of toks){
     const tok=tok0.replace(/[:\-]/g,'');
     let l=/^1S([0-9A-Z]{10})([0-9A-Z]{8})$/.exec(tok)||/^1S([0-9A-Z]{4,10}?)((?:PF|PC|PG|PW|R9|MJ|MP|S1|YJ|YL|PV|PR)[A-Z0-9]{6})$/.exec(tok);
@@ -275,6 +290,8 @@ function parse(raw){
   if(o.mac){const h=o.mac.toUpperCase().replace(/[^0-9A-F]/g,''); o.mac=h.length===12?h.match(/../g).join(':'):o.mac;}
   return o;
 }
+function gtinOk(d){ const n=d.split('').map(Number), c=n.pop(); let s=0; n.reverse().forEach((v,i)=>s+=v*(i%2?1:3)); return (10-s%10)%10===c; }
+function fmtMac(m){ const h=(m||'').toUpperCase().replace(/[^0-9A-F]/g,''); return h.length===12?h.match(/../g).join(':'):m; }
 function buildEst(sn,make){
   if(make&&make!=='HP') return '';
   if(!HP_SN.test(sn||'')) return '';
@@ -332,18 +349,39 @@ function dbErr(e){ say('Account save failed ('+(e&&e.code||'error')+'). Rows are
 let hitId=null;
 function ingest(raw,source){
   raw=(raw||'').trim(); if(!raw) return;
-  const p=parse(raw);
-  if(!p.serial&&!p.product){ say('No serial or part number found in: '+raw.slice(0,60),'bad'); return; }
+  const p=parse(raw); if(p.mac2) p.mac2=fmtMac(p.mac2);
+  // Same device again (e.g. QR photo, then the S/N label): fill gaps in its row instead of adding a new one
   if(p.serial){ const dup=rows.find(r=>r.serial===p.serial&&(!r.make||!p.make||r.make===p.make));
-    if(dup){ hitId=dup.id; render(); say('Already scanned: '+p.serial+' (row '+(rows.indexOf(dup)+1)+')','warn'); beep(220); return; } }
+    if(dup){ const n=mergeInto(dup,p); hitId=dup.id; render();
+      say(n?('Updated row '+(rows.indexOf(dup)+1)+' ('+p.serial+') with '+n):('Already scanned: '+p.serial+' (row '+(rows.indexOf(dup)+1)+')'),n?'ok':'warn'); beep(n?660:220); return; } }
+  // Separate barcodes on one label (S/N, then P/N, then MAC): join them to the row just started
+  const last=rows[rows.length-1];
+  if(last&&Date.now()-(last.ts||0)<60000&&!(p.serial&&last.serial)&&!(p.product&&last.product&&p.product!==last.product)&&(p.serial||p.product||p.mac)){
+    if(!p.serial||!last.serial){ const n=mergeInto(last,p); if(n){ hitId=last.id; render(); say('Added '+n+' to row '+rows.length+(last.serial?' ('+last.serial+')':''),'ok'); beep(660); return; } } }
+  if(!p.serial&&!p.product){
+    if(p.gtin) say('That is the retail box barcode ('+p.gtin+'). It does not identify the device: scan the QR code or the S/N barcode.','warn');
+    else if(p.mac) say('MAC address '+p.mac+' read, but there is no device row to add it to. Scan the serial first.','warn');
+    else say('No serial or part number found in: '+raw.slice(0,60),'bad');
+    beep(220); return; }
   const r={id:'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), ts:Date.now(),
     make:p.make, serial:p.serial, product:p.product, model:p.model, modelAi:false, mac:p.mac, built:buildEst(p.serial,p.make), warranty:p.warranty||'',
-    asset:'', site:settings.site||'', room:settings.room||'', tag:settings.tag||'', po:settings.po||'', notes:p.imei?'IMEI '+p.imei:'', raw, source};
+    asset:'', site:settings.site||'', room:settings.room||'', tag:settings.tag||'', po:settings.po||'', notes:[p.imei&&'IMEI '+p.imei,p.mac2&&'MAC2 '+p.mac2,p.sps&&'SPS '+p.sps].filter(Boolean).join('; '), raw, source};
   hitId=r.id; store.add(r);
   const miss=[!p.make&&'make',!p.serial&&'serial',!p.product&&p.make!=='Dell'&&'part no.'].filter(Boolean);
   say('Added '+(p.make?p.make+' ':'')+(p.serial||p.product)+(miss.length?' (missing '+miss.join(', ')+')':''),miss.length?'warn':'ok');
   beep(miss.length?440:880);
   scanEl.classList.remove('flash'); void scanEl.offsetWidth; scanEl.classList.add('flash');
+}
+function mergeInto(r,p){
+  const patch={}, got=[];
+  const fill=(k,label)=>{ if(p[k]&&!r[k]){ patch[k]=p[k]; got.push(label); } };
+  fill('make','make'); fill('serial','serial'); fill('product','part no.'); fill('model','model'); fill('mac','MAC'); fill('warranty','warranty');
+  if(p.mac&&r.mac&&fmtMac(p.mac)!==fmtMac(r.mac)&&!(r.notes||'').includes(fmtMac(p.mac))) p.mac2=p.mac2||p.mac;
+  if(p.mac2&&!(r.notes||'').includes(p.mac2)&&fmtMac(p.mac2)!==fmtMac(r.mac||patch.mac)){ patch.notes=((r.notes?r.notes+'; ':'')+'MAC2 '+p.mac2); got.push('MAC 2'); }
+  if(patch.serial||patch.make) patch.built=buildEst(patch.serial||r.serial,patch.make||r.make);
+  if(p.model&&patch.model) patch.modelAi=false;
+  if(got.length) store.update(r.id,patch);
+  return got.join(', ');
 }
 let actx=null;
 function beep(f){try{actx=actx||new (window.AudioContext||window.webkitAudioContext)();const o=actx.createOscillator(),g=actx.createGain();o.frequency.value=f;g.gain.value=.06;o.connect(g).connect(actx.destination);o.start();o.stop(actx.currentTime+.08);}catch(e){}}
@@ -389,7 +427,7 @@ $('#photoBtn').addEventListener('click',()=>$('#photo').click());
 const inClaude=!!window.claude;
 if(!inClaude&&navigator.mediaDevices&&navigator.mediaDevices.getUserMedia) $('#liveBtn').hidden=false;
 const cam=$('#cam'), camv=$('#camv');
-let stream=null, camOn=false, det=null, lastTxt='', lastAt=0, camN=0, cCan=null, cCtx=null;
+let camAlt=false, stream=null, camOn=false, det=null, lastTxt='', lastAt=0, camN=0, cCan=null, cCtx=null;
 async function startCam(){
   try{ stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}}); }
   catch(e){ say(e&&e.name==='NotAllowedError'?'Camera access was blocked. Allow the camera for this page in the browser settings, or use Photo of label.':
@@ -408,19 +446,20 @@ let wakeLock=null;
 function stopCam(){ camOn=false; if(stream) stream.getTracks().forEach(t=>t.stop()); stream=null; cam.hidden=true; try{wakeLock&&wakeLock.release();}catch(e){} wakeLock=null; scanEl.focus({preventScroll:true}); }
 async function grab(){
   const w=camv.videoWidth,h=camv.videoHeight; if(!w||!h) return [];
-  if(det){ try{ const r=await det.detect(camv); return r.map(x=>({text:x.rawValue,qr:x.format==='qr_code'})); }catch(e){ det=null; } }
-  if(typeof jsQR!=='function') return [];
-  const side=Math.min(w,h)*0.8, sx=(w-side)/2, sy=(h-side)/2, out=Math.min(720,side);
+  if(det){ try{ const r=await det.detect(camv); return r.map(x=>({text:x.rawValue,format:x.format,qr:x.format==='qr_code'})); }catch(e){ det=null; } }
+  const side=Math.min(w,h)*0.8, sx=(w-side)/2, sy=(h-side)/2, out=Math.round(Math.min(720,side));
   if(!cCan){cCan=document.createElement('canvas');cCtx=cCan.getContext('2d',{willReadFrequently:true});}
   cCan.width=cCan.height=out; cCtx.drawImage(camv,sx,sy,side,side,0,0,out,out);
-  const r=jsQR(cCtx.getImageData(0,0,out,out).data,out,out,{inversionAttempts:'attemptBoth'});
-  return r&&r.data?[{text:r.data,qr:true}]:[];
+  const id=cCtx.getImageData(0,0,out,out);
+  if(typeof jsQR==='function'){ const r=jsQR(id.data,out,out,{inversionAttempts:'dontInvert'}); if(r&&r.data) return [{text:r.data,qr:true}]; }
+  if(window.ZXing){ camAlt=!camAlt; if(camAlt) return zxDecode(toGray(id),out,out,false); }
+  return [];
 }
 async function camTick(){
   if(!camOn) return;
   const codes=await grab().catch(()=>[]);
   if(codes.length){
-    const qr=codes.filter(c=>c.qr); const txt=(qr.length?qr.map(c=>c.text):codes.map(c=>c.text)).join('\n');
+    const txt=labelText(codes);
     const now=Date.now();
     if(!(txt===lastTxt&&now-lastAt<4000)){
       lastTxt=txt; lastAt=now; const before=rows.length;
@@ -444,11 +483,8 @@ $('#photo').addEventListener('change',async e=>{
   say('Reading '+files.length+' photo'+(files.length>1?'s':'')+'…');
   let found=0;
   for(const f of files){ const codes=await decodeImage(f).catch(()=>[]);
-    if(!codes.length){ say('No QR code found in '+f.name+'. Retake closer, flat and in focus.','bad'); continue; }
-    const qr=codes.find(c=>c.qr)||codes[0];
-    let text=qr.text;
-    if(codes.length>1){ const extra=codes.filter(c=>c!==qr).map(c=>c.text).join('\n'); text+='\n'+extra; }
-    ingest(text,'photo'); found++; }
+    if(!codes.length){ say('No code found in '+f.name+'. Retake closer, square-on and in focus, with the flash off. Codes etched into metal or dark plastic read best with a USB 2D scanner.','bad'); continue; }
+    ingest(labelText(codes),'photo'); found++; }
   if(found>1) say('Added from '+found+' photos.','ok');
 });
 async function decodeImage(file){
@@ -456,11 +492,26 @@ async function decodeImage(file){
   const out=[];
   if('BarcodeDetector' in window){
     try{const det=new BarcodeDetector();const res=await det.detect(bmp);
-      res.forEach(r=>out.push({text:r.rawValue,qr:r.format==='qr_code'}));
+      res.sort((a,b)=>(a.boundingBox?.y||0)-(b.boundingBox?.y||0)).forEach(r=>out.push({text:r.rawValue,format:r.format,qr:r.format==='qr_code'}));
       if(out.length) return out;}catch(e){}
   }
-  if(typeof jsQR!=='function') return out;
   const W=bmp.width,H=bmp.height;
+  if(window.ZXing){
+    const s=Math.min(1,1600/Math.max(W,H)), w=Math.round(W*s), h=Math.round(H*s);
+    const c=document.createElement('canvas');c.width=w;c.height=h;
+    const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(bmp,0,0,w,h);
+    const z=zxDecode(toGray(x.getImageData(0,0,w,h)),w,h,true);
+    if(z.length) return z;
+    // Hard case (etched or low-contrast): look for the code at higher resolution
+    say('No code found on a quick look. Trying harder…');
+    await new Promise(r=>setTimeout(r,30));
+    const s2=Math.min(1,2600/Math.max(W,H)), w2=Math.round(W*s2), h2=Math.round(H*s2);
+    const c2=document.createElement('canvas');c2.width=w2;c2.height=h2;
+    const x2=c2.getContext('2d',{willReadFrequently:true});x2.drawImage(bmp,0,0,w2,h2);
+    const d=deepDecode(toGray(x2.getImageData(0,0,w2,h2)),w2,h2);
+    if(d.length) return d;
+  }
+  if(typeof jsQR!=='function') return out;
   for(const max of [1600,1000,2400,700]){
     const s=Math.min(1,max/Math.max(W,H)), w=Math.round(W*s), h=Math.round(H*s);
     const c=document.createElement('canvas');c.width=w;c.height=h;
@@ -470,6 +521,93 @@ async function decodeImage(file){
   }
   return out;
 }
+function toGray(d){ const a=d.data, g=new Uint8ClampedArray(d.width*d.height); for(let i=0,j=0;i<g.length;i++,j+=4) g[i]=(a[j]*77+a[j+1]*150+a[j+2]*29)>>8; return g; }
+let zxAll=null, zxLin=null;
+function zxReader(fmts){ const r=new ZXing.MultiFormatReader(), hm=new Map(); hm.set(ZXing.DecodeHintType.TRY_HARDER,true); hm.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,fmts); r.setHints(hm); return r; }
+// Decode QR/Data Matrix/1D codes; with strips=true also sweep horizontal bands to catch every barcode on a multi-barcode label.
+function zxDecode(gray,w,h,strips){
+  const F=ZXing.BarcodeFormat, found=new Map();
+  zxAll=zxAll||zxReader([F.QR_CODE,F.DATA_MATRIX,F.CODE_128,F.CODE_39,F.EAN_13,F.UPC_A,F.ITF,F.PDF_417]);
+  zxLin=zxLin||zxReader([F.CODE_128,F.CODE_39,F.EAN_13,F.UPC_A,F.ITF]);
+  const one=(rd,g,ww,hh,y)=>{ try{ const r=rd.decodeWithState(new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(new ZXing.RGBLuminanceSource(g,ww,hh))));
+      const t=r.getText(); if(t&&!found.has(t)) found.set(t,{text:t,format:F[r.getBarcodeFormat()],qr:F[r.getBarcodeFormat()]==='QR_CODE',y}); }catch(e){} };
+  const pass=(g,ww,hh)=>{ one(zxAll,g,ww,hh,-1); if(!strips) return;
+    const bh=Math.max(40,Math.round(hh*0.09)), st=Math.round(bh/2);
+    for(let y=0;y+bh<=hh;y+=st) one(zxLin,g.subarray(y*ww,(y+bh)*ww),ww,bh,y); };
+  pass(gray,w,h);
+  if(!found.size&&strips){ const r=new Uint8ClampedArray(w*h); for(let y=0;y<h;y++) for(let x=0;x<w;x++) r[x*h+(h-1-y)]=gray[y*w+x]; pass(r,h,w); }
+  return [...found.values()].sort((a,b)=>a.y-b.y);
+}
+// Second pass for hard photos (laser-etched, low contrast, light-on-dark): find textured square regions, crop, stretch contrast, try both polarities at several sizes.
+function resample(src,sw,sh,dw,dh){
+  if(sw/dw>1.5||sh/dh>1.5){ const out=new Uint8ClampedArray(dw*dh), fx=sw/dw, fy=sh/dh;   // area average when shrinking
+    for(let y=0;y<dh;y++){ const ya=Math.floor(y*fy), yb=Math.max(ya+1,Math.floor((y+1)*fy));
+      for(let x=0;x<dw;x++){ const xa=Math.floor(x*fx), xb=Math.max(xa+1,Math.floor((x+1)*fx)); let a=0;
+        for(let yy=ya;yy<yb;yy++) for(let xx=xa;xx<xb;xx++) a+=src[yy*sw+xx]; out[y*dw+x]=a/((yb-ya)*(xb-xa)); } }
+    return out; }
+  const out=new Uint8ClampedArray(dw*dh), fx=sw/dw, fy=sh/dh;
+  for(let y=0;y<dh;y++){ const sy=Math.min(sh-1,(y+.5)*fy-.5), y0=Math.max(0,Math.floor(sy)), y1=Math.min(sh-1,y0+1), wy=sy-y0;
+    for(let x=0;x<dw;x++){ const sx=Math.min(sw-1,(x+.5)*fx-.5), x0=Math.max(0,Math.floor(sx)), x1=Math.min(sw-1,x0+1), wx=sx-x0;
+      out[y*dw+x]=(src[y0*sw+x0]*(1-wx)+src[y0*sw+x1]*wx)*(1-wy)+(src[y1*sw+x0]*(1-wx)+src[y1*sw+x1]*wx)*wy; } }
+  return out; }
+function codeRegions(g,w,h){
+  const dw=240, f=w/dw, dh=Math.round(h/f), s=resample(g,w,h,dw,dh), e=new Float32Array(dw*dh);
+  for(let y=1;y<dh-1;y++) for(let x=1;x<dw-1;x++){ const i=y*dw+x; e[i]=Math.abs(s[i+1]-s[i-1])+Math.abs(s[i+dw]-s[i-dw]); }
+  const r=4, d=new Float32Array(dw*dh); let sum=0, sq=0;
+  for(let y=r;y<dh-r;y++) for(let x=r;x<dw-r;x++){ let a=0; for(let yy=-r;yy<=r;yy++) for(let xx=-r;xx<=r;xx++) a+=e[(y+yy)*dw+x+xx]; d[y*dw+x]=a; sum+=a; sq+=a*a; }
+  const n=(dw-2*r)*(dh-2*r), mean=sum/n, sd=Math.sqrt(Math.max(0,sq/n-mean*mean));
+  const boxes=[];
+  for(const k of [1.5,1.0,0.5]){
+    const th=mean+k*sd, seen=new Uint8Array(dw*dh);
+    for(let i=0;i<dw*dh;i++){ if(seen[i]||d[i]<th) continue;
+      let x0=1e9,y0=1e9,x1=-1,y1=-1,area=0,score=0; const st=[i]; seen[i]=1;
+      while(st.length){ const j=st.pop(), x=j%dw, y=(j/dw)|0; area++; score+=d[j]; if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y;
+        for(const nb of [j-1,j+1,j-dw,j+dw]) if(nb>=0&&nb<dw*dh&&!seen[nb]&&d[nb]>=th){ seen[nb]=1; st.push(nb); } }
+      const bw=x1-x0+1, bh=y1-y0+1; if(bw<8||bh<8||bw/bh>3||bh/bw>3) continue;
+      boxes.push({x:x0*f,y:y0*f,w:bw*f,h:bh*f,score:score});
+    }
+  }
+  boxes.sort((a,b)=>b.score-a.score);
+  const keep=[]; for(const b of boxes){ if(keep.some(k=>Math.abs(k.x-b.x)<k.w*.3&&Math.abs(k.y-b.y)<k.h*.3&&Math.abs(k.w-b.w)<k.w*.4)) continue; keep.push(b); if(keep.length>=8) break; }
+  // Also rank square windows by contrast (catches etched codes on grainy metal)
+  const ss=Math.min(w,h), wins=[];
+  for(const fr of [0.14,0.2,0.28]){ const W=Math.round(ss*fr), st=Math.round(W/2);
+    for(let y=0;y+W<=h;y+=st) for(let x=0;x+W<=w;x+=st){ let a=0,q=0,n=0; for(let yy=y;yy<y+W;yy+=4) for(let xx=x;xx<x+W;xx+=4){ const v=g[yy*w+xx]; a+=v; q+=v*v; n++; }
+      const m=a/n; wins.push({x,y,w:W,h:W,score:Math.sqrt(Math.max(0,q/n-m*m)),win:1}); } }
+  wins.sort((a,b)=>b.score-a.score);
+  return keep.concat(wins.slice(0,18));
+}
+function deepDecode(g,w,h){
+  const F=ZXing.BarcodeFormat;
+  const rd=zxReader([F.QR_CODE,F.DATA_MATRIX,F.PDF_417]);
+  const bins=[ZXing.HybridBinarizer,ZXing.GlobalHistogramBinarizer];
+  const t0=Date.now();
+  for(const b of codeRegions(g,w,h)){
+   for(const ex of (b.win?[1]:[1.12,1.4])){
+    const side=Math.max(b.w,b.h)*ex, cx=b.x+b.w/2, cy=b.y+b.h/2;
+    const x0=Math.max(0,Math.round(cx-side/2)), y0=Math.max(0,Math.round(cy-side/2)), x1=Math.min(w,Math.round(cx+side/2)), y1=Math.min(h,Math.round(cy+side/2));
+    const cw=x1-x0, ch=y1-y0; if(cw<20||ch<20) continue;
+    const c=new Uint8ClampedArray(cw*ch); for(let y=0;y<ch;y++) c.set(g.subarray((y0+y)*w+x0,(y0+y)*w+x1),y*cw);
+    const sorted=Array.from(c).sort((a,b)=>a-b), lo=sorted[Math.floor(c.length*.02)], hi=sorted[Math.floor(c.length*.98)], rg=Math.max(1,hi-lo);
+    const nrm=c.map(v=>Math.max(0,Math.min(255,(v-lo)*255/rg)));
+    const med=nrm.slice().sort()[nrm.length>>1];
+    for(const S of [200,300,400,250,500,160]){
+      const dwid=S, dhei=Math.round(S*ch/cw), z=resample(nrm,cw,ch,dwid,dhei);
+      for(const P of [0,30]){ const pw=dwid+2*P, ph=dhei+2*P, pd=new Uint8ClampedArray(pw*ph).fill(med);
+        for(let y=0;y<dhei;y++) pd.set(z.subarray(y*dwid,(y+1)*dwid),(y+P)*pw+P);
+        for(const src of [pd,pd.map(v=>255-v)]) for(const B of bins){ try{ const r=rd.decodeWithState(new ZXing.BinaryBitmap(new B(new ZXing.RGBLuminanceSource(src,pw,ph))));
+          const fm=F[r.getBarcodeFormat()]; return [{text:r.getText(),format:fm,qr:fm==='QR_CODE',y:0}]; }catch(e){} } }
+      if(Date.now()-t0>6000) return [];
+    }
+   }
+  }
+  return [];
+}
+
+const GTIN_FMT=/^(upc_?[ae]|ean_?(13|8))$/i;
+// Join everything read from one label into one scan; drop the retail UPC/EAN unless it is all there is.
+function labelText(codes){ const useful=codes.filter(c=>!GTIN_FMT.test(c.format||'')); const use=useful.length?useful:codes;
+  return use.sort((a,b)=>(b.qr?1:0)-(a.qr?1:0)).map(c=>c.text).join('\n'); }
 
 /* ---------- defaults ---------- */
 const dmap={site:'#d_site',room:'#d_room',tag:'#d_tag',po:'#d_po'};
