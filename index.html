@@ -159,7 +159,7 @@ input[type=file]{display:none}
       <li>Understood formats: vendor support URLs (HP <code>?serialnumber=</code>, Dell <code>qrl.dell.com/&lt;tag&gt;</code>, Lenovo <code>pcsupport</code>), Lenovo <code>1S&lt;MTM&gt;&lt;serial&gt;</code> codes, ANSI/ISO box labels (<code>S</code> serial, <code>1P</code> part), GS1 <code>(21)</code> serials, labelled text (<code>S/N</code>, <code>Service Tag</code>, <code>MTM</code>, <code>P/N</code>, <code>VFY:</code>, <code>IMEI</code>, <code>MAC</code>), Apple part numbers (<code>…/A</code>), Samsung model codes, and HP's comma-separated QR (<code>serial,product,model,1y1y0y</code>, where the last part is years of parts/labour/on-site warranty) and HP box QR links (<code>hpsmart.com/QRC/…/21/&lt;serial&gt;?240=&lt;part&gt;</code>).</li>
       <li><b>Phone barcode apps</b>: apps that type into the PC (keyboard mode, e.g. Barcode to PC) work like a USB scanner. For apps that keep a scan history, export or share it as .csv or .txt and use <b>Import list</b>, or paste the list onto the page: each line becomes its own device.</li>
       <li><b>Etched codes</b> (laser-marked Data Matrix or QR on metal or dark plastic): a photo gets a slower second attempt with contrast boosted, which often works for etched QR codes. Etched Data Matrix codes on brushed metal are rarely readable from a photo; use a USB or Bluetooth 2D scanner for those.</li>
-      <li><b>Labels with several barcodes</b> (S/N, P/N, MAC): a photo reads them all at once. Scanned one by one, the P/N and MAC join the row started by the S/N within a minute. Scanning another label for a device already in the list fills its empty fields. The retail UPC/EAN box barcode is ignored because it does not identify the device. Make is detected from the URL, label text or serial pattern; a lone 7-character code is taken as a Dell service tag. Raw text is kept in the export.</li>
+      <li><b>Labels with several barcodes</b> (S/N, P/N, MAC): a photo reads them all at once. Scanned one by one, start each device with its <b>serial</b>; the P/N, MAC and locale barcodes that follow join that row for two minutes. Other barcodes on labels and boxes (tracking, Box ID, SO, PO, shipment, UPC) are ignored, and HP spare/SSA numbers go to Notes. Scanning another label for a device already in the list fills its empty fields. The retail UPC/EAN box barcode is ignored because it does not identify the device. Make is detected from the URL, label text or serial pattern; a lone 7-character code is taken as a Dell service tag. Raw text is kept in the export.</li>
       <li>Duplicate serials are not added again; the existing row is highlighted instead.</li>
       <li><b>Built (est.)</b> is filled for HP serials only, decoded from characters 4–6 (year digit + week), and is an estimate. <b>Fill model names</b> asks Claude to name the model from the make and part number; those values are marked <span class="ai">AI</span> and should be checked before they go into an asset register.</li>
       <li>Rows save to your account when signed in, so you can scan on a phone and export on a laptop.</li>
@@ -180,7 +180,8 @@ function say(msg,kind){statusEl.textContent=msg;statusEl.className='status'+(kin
 const MAKES=[['HP',/\bHP\b|hp\.com|hpsmart|hewlett/i],['Dell',/dell/i],['Lenovo',/lenovo|thinkpad|thinkcentre/i],['Fujitsu',/fujitsu|\bfsc\b/i],
   ['Apple',/apple|macbook|\bimac\b/i],['Samsung',/samsung/i],['Microsoft',/microsoft|surface/i],['Acer',/\bacer\b/i],['ASUS',/\basus\b/i],
   ['Dynabook',/dynabook|toshiba/i],['Panasonic',/panasonic|toughbook/i],['Getac',/getac/i],['Google',/chromebook|google/i]];
-const HP_SN=/^(5C[A-Z]|CN[A-Z0-9]|CZC|MXL|2U[A-Z]|8C[A-Z]|4C[A-Z]|3C[A-Z]|1H[A-Z]|SGH|USH|TRF|MXM)[A-Z0-9]{7}$/;
+const HP_SN=/^(5C|CN|CZ|MX|2U|8C|4C|3C|1H|SG|US|TR|2M|6C|7C|9C|1C|2C|CM|MY|JP|BR|TW)[A-Z0-9]\d{3}[A-Z0-9]{4}$/;
+const SPARE=/^[A-Z0-9]\d{5}-\d{3}$/;
 const HP_PN=/^[0-9A-Z]{4,8}#[A-Z0-9]{3}$|^[0-9][A-Z0-9]{3,6}(EA|ET|AV|UT|UA|EC|ES|AA|EW|ED|UC|AT)$/;
 const LEN_SN=/^(PF|PC|PG|PW|R9|MJ|MP|S1|YJ|YL|PV|PR)[A-Z0-9]{6}$/;
 const LEN_MTM=/^\d{2}[A-Z0-9]{6}[A-Z]{2}$/;
@@ -197,7 +198,7 @@ function parse(raw){
   const o={make:'',serial:'',product:'',model:'',mac:'',mac2:'',imei:'',warranty:'',gtin:''};
   // A bare 12-14 digit code with a valid check digit is the retail box barcode (UPC/EAN), not a device id
   if(/^\d{12,14}$/.test(t)&&gtinOk(t)){ o.gtin=t; return o; }
-  const setP=v=>{if(v&&!o.product)o.product=v;}, setS=v=>{if(v&&!o.serial)o.serial=v;};
+  const setP=v=>{if(v&&!o.product)o.product=v;}, setS=(v,strong=true)=>{if(v&&!o.serial){o.serial=v;o.snStrong=strong;}};
   for(const [n,re] of MAKES){ if(re.test(t)){o.make=n;break;} }
 
   // ANSI MH10.8.2 / ISO 15434 box labels: [)>RS06 GS S<serial> GS 1P<part> ...
@@ -263,7 +264,7 @@ function parse(raw){
   if(!o.product&&(x=U.match(/\b((?:VFY|LKN):[A-Z0-9\-]{5,})\b/))){o.product=x[1];o.make||='Fujitsu';}
 
   // HP component labels: P/N and SPS spare numbers like L13899-001
-  { const sp=[...U.matchAll(/\b([A-Z0-9]\d{5}-\d{3})\b/g)].map(z=>z[1]); if(sp.length){ setP(sp[0]); if(sp[1]&&sp[1]!==o.product) o.sps=sp[1]; o.make||='HP'; } }
+  const spares=[...new Set([...U.matchAll(/\b([A-Z0-9]\d{5}-\d{3})\b/g)].map(z=>z[1]))];
   if(!o.mac&&(x=U.match(/\bMAC[:\s\-]*([0-9A-F]{12})\b/))) o.mac=x[1];
   // Bare tokens
   const toks=U.split(/[\s,;|\\]+/).map(s=>s.replace(/^[^A-Z0-9]+|[^A-Z0-9#]+$/g,'')).filter(s=>s&&!/^[A-Z0-9]\d{5}-\d{3}$/.test(s)&&!/^MAC[0-9A-F]{12}$/.test(s));
@@ -272,14 +273,18 @@ function parse(raw){
     let l=/^1S([0-9A-Z]{10})([0-9A-Z]{8})$/.exec(tok)||/^1S([0-9A-Z]{4,10}?)((?:PF|PC|PG|PW|R9|MJ|MP|S1|YJ|YL|PV|PR)[A-Z0-9]{6})$/.exec(tok);
     if(l){setP(l[1]);setS(l[2]);o.make||='Lenovo';continue;}
     if(/^1P/.test(tok)&&tok.length>5){setP(tok.slice(2));continue;}
+    if(/^30P[A-Z0-9]{3}$/.test(tok)){o.loc=tok.slice(3);continue;}
+    if(/^[A-Z]{1}[A-Z0-9]{2}$/.test(tok)&&toks.length===1){o.loc=tok;continue;}
     if(!o.serial&&tok.length===11&&tok[0]==='S'&&HP_SN.test(tok.slice(1))){setS(tok.slice(1));continue;}
     if(!o.serial&&HP_SN.test(tok)){setS(tok);o.make||='HP';continue;}
     if(!o.serial&&LEN_SN.test(tok)){setS(tok);o.make||='Lenovo';continue;}
     if(!o.product&&HP_PN.test(tok)&&tok!==o.serial){setP(tok);o.make||='HP';continue;}
     if(!o.product&&LEN_MTM.test(tok)&&o.make==='Lenovo'&&tok!==o.serial){setP(tok);continue;}
   }
-  if(!o.serial){ const c=toks.map(s=>s.replace(/[:\-]/g,'')).filter(s=>serialish(s)&&s!==o.product&&s!==o.product.replace(/[:\-\/]/g,'')&&s!==o.imei&&!/^HTTP/.test(s));
-    if(c.length) setS(c[0]); }
+  if(!o.serial){ const c=toks.map(s=>s.replace(/[:\-]/g,'')).filter(s=>!/^(1P|30P|1S)/.test(s)&&serialish(s)&&s!==o.product&&s!==o.product.replace(/[:\-\/]/g,'')&&s!==o.imei&&!/^HTTP/.test(s));
+    if(c.length) setS(c[0],false); }
+  // HP spare/SSA part numbers (L13899-001): the part number only when nothing better is on the label
+  if(spares.length){ if(!o.product){ o.product=spares[0]; spares.shift(); } if(spares.length) o.sps=spares.join(' '); o.make||='HP'; }
   if(!o.make){
     if(HP_SN.test(o.serial)||HP_PN.test(o.product)) o.make='HP';
     else if(LEN_SN.test(o.serial)||LEN_MTM.test(o.product)) o.make='Lenovo';
@@ -288,7 +293,7 @@ function parse(raw){
     else if(/^(NP\d|SM-)/.test(o.product)) o.make='Samsung';
   }
   // Lone 7-character code with nothing else is a Dell service tag
-  if(!o.make&&DELL_TAG.test(o.serial)&&mixed(o.serial)&&!o.product) o.make='Dell';
+  if(!o.make&&DELL_TAG.test(o.serial)&&mixed(o.serial)&&!o.product){ o.make='Dell'; o.snStrong=true; }
   if(!o.make&&/^\d{12}$/.test(o.serial)&&!o.product) o.make='Microsoft';
   if(o.mac){const h=o.mac.toUpperCase().replace(/[^0-9A-F]/g,''); o.mac=h.length===12?h.match(/../g).join(':'):o.mac;}
   return o;
@@ -357,18 +362,26 @@ function ingest(raw,source){
   if(p.serial){ const dup=rows.find(r=>r.serial===p.serial&&(!r.make||!p.make||r.make===p.make));
     if(dup){ const n=mergeInto(dup,p); hitId=dup.id; render();
       say(n?('Updated row '+(rows.indexOf(dup)+1)+' ('+p.serial+') with '+n):('Already scanned: '+p.serial+' (row '+(rows.indexOf(dup)+1)+')'),n?'ok':'warn'); beep(n?660:220); return n?'updated':'dup'; } }
-  // Separate barcodes on one label (S/N, then P/N, then MAC): join them to the row just started
-  const last=rows[rows.length-1];
-  if(last&&Date.now()-(last.ts||0)<60000&&!(p.serial&&last.serial)&&!(p.product&&last.product&&p.product!==last.product)&&(p.serial||p.product||p.mac)){
-    if(!p.serial||!last.serial){ const n=mergeInto(last,p); if(n){ hitId=last.id; render(); say('Added '+n+' to row '+rows.length+(last.serial?' ('+last.serial+')':''),'ok'); beep(660); return 'updated'; } } }
+  // Separate barcodes on one label (S/N, P/N, MAC, locale): join them to the row being scanned
+  const last=rows[rows.length-1], recent=last&&Date.now()-(last.lastTs||last.ts||0)<120000;
+  const onlyWeak=p.serial&&!p.snStrong&&!p.product&&!p.mac;
+  if(recent){
+    const serialOk=!p.serial||!last.serial||(p.snStrong&&last.snWeak)||onlyWeak;
+    if(serialOk&&prodCompat(last.product,p.product)&&!(onlyWeak&&last.serial)){
+      if(p.serial||p.product||p.mac||p.loc||p.sps){ const n=mergeInto(last,p); hitId=last.id; render();
+        if(n){ say('Added '+n+' to row '+rows.length+' ('+(last.serial||last.product)+')','ok'); beep(660); return 'updated'; }
+        if(!p.serial||p.serial===last.serial){ say('Already in row '+rows.length+' ('+(last.serial||last.product)+'). For the next device, scan its serial first.','warn'); beep(220); return 'dup'; } } }
+    // Other barcodes on the label or box (tracking, Box ID, SO, PO, shipment) are not device identifiers
+    if(onlyWeak||(!p.serial&&!p.product&&!p.mac)){ say('Ignored '+(p.gtin?'retail barcode ':'barcode ')+(p.gtin||p.serial||p.loc||raw.slice(0,30))+': not a serial, part number or MAC. Row '+rows.length+' unchanged.','warn'); beep(220); return 'none'; }
+  }
   if(!p.serial&&!p.product){
     if(p.gtin) say('That is the retail box barcode ('+p.gtin+'). It does not identify the device: scan the QR code or the S/N barcode.','warn');
     else if(p.mac) say('MAC address '+p.mac+' read, but there is no device row to add it to. Scan the serial first.','warn');
     else say('No serial or part number found in: '+raw.slice(0,60),'bad');
     beep(220); return 'none'; }
   const r={id:'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), ts:Date.now(),
-    make:p.make, serial:p.serial, product:p.product, model:p.model, modelAi:false, mac:p.mac, built:buildEst(p.serial,p.make), warranty:p.warranty||'',
-    asset:'', site:settings.site||'', room:settings.room||'', tag:settings.tag||'', po:settings.po||'', notes:[p.imei&&'IMEI '+p.imei,p.mac2&&'MAC2 '+p.mac2,p.sps&&'SPS '+p.sps].filter(Boolean).join('; '), raw, source};
+    make:p.make, serial:p.serial, snWeak:!!(p.serial&&!p.snStrong), product:p.product+(p.loc&&p.product&&!p.product.includes('#')?'#'+p.loc:''), model:p.model, modelAi:false, mac:p.mac, built:buildEst(p.serial,p.make), warranty:p.warranty||'',
+    asset:'', site:settings.site||'', room:settings.room||'', tag:settings.tag||'', po:settings.po||'', notes:[p.imei&&'IMEI '+p.imei,p.mac2&&'MAC2 '+p.mac2,p.sps&&'Spare '+p.sps].filter(Boolean).join('; '), raw, source};
   hitId=r.id; store.add(r);
   const miss=[!p.make&&'make',!p.serial&&'serial',!p.product&&p.make!=='Dell'&&'part no.'].filter(Boolean);
   say('Added '+(p.make?p.make+' ':'')+(p.serial||p.product)+(miss.length?' (missing '+miss.join(', ')+')':''),miss.length?'warn':'ok');
@@ -390,15 +403,34 @@ function ingestMany(text,source){
   }
   ingest(text,source);
 }
+const pbase=v=>(v||'').split('#')[0];
+// Two part numbers can belong to one device if they are the same SKU (with or without locale) or one is an HP spare/SSA number
+function prodCompat(a,b){ return !a||!b||pbase(a)===pbase(b)||SPARE.test(a)||SPARE.test(b); }
 function mergeInto(r,p){
-  const patch={}, got=[];
+  const patch={}, got=[], notes=[];
   const fill=(k,label)=>{ if(p[k]&&!r[k]){ patch[k]=p[k]; got.push(label); } };
-  fill('make','make'); fill('serial','serial'); fill('product','part no.'); fill('model','model'); fill('mac','MAC'); fill('warranty','warranty');
+  fill('make','make'); fill('model','model'); fill('mac','MAC'); fill('warranty','warranty');
+  if(p.serial){
+    if(!r.serial){ patch.serial=p.serial; patch.snWeak=!p.snStrong; got.push('serial'); }
+    else if(r.snWeak&&p.snStrong&&p.serial!==r.serial){ patch.serial=p.serial; patch.snWeak=false; got.push('serial'); }
+  }
+  if(p.product){
+    const cur=r.product||'';
+    if(!cur){ patch.product=p.product; got.push('part no.'); }
+    else if(SPARE.test(cur)&&!SPARE.test(p.product)){ patch.product=p.product; notes.push('Spare '+cur); got.push('part no.'); }
+    else if(SPARE.test(p.product)&&!SPARE.test(cur)){ if(!(r.notes||'').includes(p.product)){ notes.push('Spare '+p.product); got.push('spare no.'); } }
+    else if(pbase(cur)===pbase(p.product)&&p.product.length>cur.length){ patch.product=p.product; got.push('locale'); }
+  }
+  if(p.sps&&!(r.notes||'').includes(p.sps)){ notes.push('Spare '+p.sps); got.push('spare no.'); }
+  const prod=patch.product||r.product||'';
+  if(p.loc&&prod&&!prod.includes('#')){ patch.product=prod+'#'+p.loc; got.push('locale'); }
   if(p.mac&&r.mac&&fmtMac(p.mac)!==fmtMac(r.mac)&&!(r.notes||'').includes(fmtMac(p.mac))) p.mac2=p.mac2||p.mac;
-  if(p.mac2&&!(r.notes||'').includes(p.mac2)&&fmtMac(p.mac2)!==fmtMac(r.mac||patch.mac)){ patch.notes=((r.notes?r.notes+'; ':'')+'MAC2 '+p.mac2); got.push('MAC 2'); }
+  if(p.mac2&&!(r.notes||'').includes(fmtMac(p.mac2))&&fmtMac(p.mac2)!==fmtMac(r.mac||patch.mac)){ notes.push('MAC2 '+fmtMac(p.mac2)); got.push('MAC 2'); }
+  if(notes.length) patch.notes=[r.notes,...notes].filter(Boolean).join('; ');
+  patch.lastTs=Date.now();
   if(patch.serial||patch.make) patch.built=buildEst(patch.serial||r.serial,patch.make||r.make);
   if(p.model&&patch.model) patch.modelAi=false;
-  if(got.length) store.update(r.id,patch);
+  if(got.length) store.update(r.id,patch); else r.lastTs=Date.now();
   return got.join(', ');
 }
 let actx=null;
@@ -649,7 +681,7 @@ function render(){
   $('#empty').hidden=rows.length>0;
   const active=document.activeElement, selS=active&&active.selectionStart, aid=active&&active.dataset&&active.dataset.id, af=active&&active.dataset&&active.dataset.f;
   tb.innerHTML=rows.map((r,i)=>{
-    const miss=!r.serial||!r.make||(!r.product&&r.make!=='Dell');
+    const miss=!r.serial||r.snWeak||!r.make||(!r.product&&r.make!=='Dell');
     const pill=r.example?'<span class="pill ex">Example</span>':miss?'<span class="pill warn">Check</span>':'<span class="pill ok">OK</span>';
     const cells=COLS.map(k=>{
       if(k==='built') return '<td class="mono">'+esc(r.built)+'</td>';
@@ -668,7 +700,7 @@ $('#rows').addEventListener('input',e=>{
   const el=e.target; if(!el.dataset.f) return;
   const k=el.dataset.f, id=el.dataset.id;
   let v=el.value; if(['serial','product'].includes(k)) {v=v.toUpperCase(); }
-  const patch={[k]:v}; if(k==='serial'||k==='make'){const r=rows.find(x=>x.id===id)||{}; patch.built=buildEst(k==='serial'?v:r.serial,k==='make'?v:r.make);} if(k==='model') patch.modelAi=false;
+  const patch={[k]:v}; if(k==='serial'||k==='make'){const r=rows.find(x=>x.id===id)||{}; patch.built=buildEst(k==='serial'?v:r.serial,k==='make'?v:r.make);} if(k==='model') patch.modelAi=false; if(k==='serial') patch.snWeak=false;
   clearTimeout(el._t); el._t=setTimeout(()=>{store.update(id,patch); if(k==='serial'||k==='product'||k==='make') render();},400);
 });
 $('#rows').addEventListener('click',e=>{
