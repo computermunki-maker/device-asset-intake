@@ -107,6 +107,8 @@ input[type=file]{display:none}
     <button class="btn" id="photosBtn" type="button" title="Pick one or many label photos from the gallery or a folder">Choose photos</button>
     <input type="file" id="photo" accept="image/*" capture="environment">
     <input type="file" id="photos" accept="image/*,.jpg,.jpeg,.png,.heic,.heif,.webp" multiple>
+    <button class="btn" id="folderBtn" type="button" hidden title="Read every label photo in a folder on this computer">Choose folder</button>
+    <input type="file" id="folder" webkitdirectory multiple>
     <input type="file" id="listFile" multiple accept=".csv,.txt,.xlsx,.xls,text/plain,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/*,.jpg,.jpeg,.png,.heic,.webp">
   </div>
   <div class="status" id="status" role="status" aria-live="polite">Ready. Scanner input goes into the box above.</div>
@@ -160,7 +162,7 @@ input[type=file]{display:none}
     <summary>How scanning works</summary>
     <ul>
       <li><b>Hardware scanner</b> (keyboard wedge, USB or Bluetooth): the badge at the top must say <b>Ready to scan</b>. If it says paused, tap the scan box; inside the Claude app, keystrokes go to the chat box until you click the page. Scanners that end with Enter, Tab or nothing at all are all accepted. Multi-line QR payloads are captured whole, so labels that encode several fields on separate lines still land as one row.</li>
-      <li><b>Several photos at once</b>: <b>Choose photos</b> picks any number from the gallery: long-press the first photo, then tap the rest. On a laptop, Ctrl-click or Shift-click several in the file window, or drag them onto the page. <b>Import list</b> accepts photos too, mixed with .xlsx/.csv files. iPhone HEIC photos only open in Safari; set Camera &gt; Formats &gt; Most Compatible if they are not read. Each photo is one label; photos of different labels on the same device merge into its row. <b>Take photo</b> opens the camera for a single shot.</li>
+      <li><b>Several photos at once</b>: <b>Choose photos</b> picks any number from the gallery: long-press the first photo, then tap the rest. On a laptop, Ctrl-click or Shift-click several in the file window, or drag them onto the page. <b>Import list</b> accepts photos too, mixed with .xlsx/.csv files. Photos on a phone plugged into a PC by USB can only be picked one at a time (Windows treats the phone as a media device): copy them into a folder on the PC first, then use <b>Choose folder</b>, or open this page on the phone itself. iPhone HEIC photos only open in Safari; set Camera &gt; Formats &gt; Most Compatible if they are not read. Each photo is one label; photos of different labels on the same device merge into its row. <b>Take photo</b> opens the camera for a single shot.</li>
       <li><b>MAC addresses</b>: a device can have any number (LAN, Wi-Fi, Bluetooth, dock). Every MAC on a label or scanned after the serial is added to that row, separated by semicolons; type extra ones the same way. The export puts each in its own column (MAC 1, MAC 2, …).</li>
       <li><b>Email list</b>: on a phone it opens the share sheet with the Excel file attached; pick your mail app. On a laptop it saves the file and opens a new email with the device list in the body, ready for you to attach the file. Set <b>Email list to</b> above to pre-fill the address.</li>
       <li><b>Phone or webcam</b>: <b>Live scan</b> opens the camera and adds each new code it sees, with a buzz and a green frame. It appears in the downloaded page when opened over https or from the PC's own disk; Claude's viewer does not allow live camera use, so inside Claude use <b>Take photo</b> or <b>Choose photos</b>.</li>
@@ -520,6 +522,11 @@ document.addEventListener('click',e=>{ if(!editable(e.target)&&!e.target.closest
 
 $('#photoBtn').addEventListener('click',()=>$('#photo').click());
 let lastPick='';
+// Whole-folder pick (desktop browsers): copy photos off the phone into a folder, then read them all at once
+if('webkitdirectory' in document.createElement('input')&&!/Android|iPhone|iPad/i.test(navigator.userAgent)) $('#folderBtn').hidden=false;
+$('#folderBtn').addEventListener('click',()=>{ lastPick='folder'; $('#folder').click(); });
+$('#folder').addEventListener('change',e=>{ const f=[...e.target.files].filter(x=>/^image\//.test(x.type)||/\.(jpe?g|png|heic|webp)$/i.test(x.name)).sort((a,b)=>a.lastModified-b.lastModified); e.target.value='';
+  if(!f.length){ say('No photos in that folder.','warn'); return; } processPhotos(f); });
 $('#photosBtn').addEventListener('click',()=>{ lastPick='photos'; $('#photos').click(); });
 $('#photoBtn').addEventListener('click',()=>{ lastPick='photo'; });
 $('#importBtn').addEventListener('click',()=>$('#listFile').click());
