@@ -66,6 +66,7 @@ tr.hit td{background:color-mix(in srgb,var(--flash) 22%,transparent)}
 td.mono,td input.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:13px}
 td input{font:14px var(--f-body);border:1px solid transparent;background:transparent;color:var(--ink);padding:6px;border-radius:4px;width:100%;min-width:90px}
 td input:hover{border-color:var(--line)} td input:focus{border-color:var(--accent);background:var(--bg);outline:none}
+td input[data-f=mac]{min-width:170px}
 td.n{color:var(--muted);font-family:var(--f-mono);font-size:12px;width:36px}
 .pill{display:inline-block;font:600 11px var(--f-body);letter-spacing:.04em;padding:3px 8px;border-radius:99px;background:var(--chip);color:var(--muted);white-space:nowrap}
 .pill.ok{color:var(--ok)} .pill.warn{color:var(--warn)} .pill.ex{color:var(--accent)}
@@ -142,7 +143,7 @@ input[type=file]{display:none}
     <div class="tablewrap">
       <table>
         <thead><tr>
-          <th>#</th><th>Make</th><th>Serial / service tag</th><th>Part / MTM</th><th>Model</th><th>Built (est.)</th><th title="Years of parts / labour / on-site cover">Warranty</th><th title="From the vendor's warranty page: copy it and paste it here">Warranty end</th><th>MAC</th>
+          <th>#</th><th>Make</th><th>Serial / service tag</th><th>Part / MTM</th><th>Model</th><th>Built (est.)</th><th title="Years of parts / labour / on-site cover">Warranty</th><th title="From the vendor's warranty page: copy it and paste it here">Warranty end</th><th>MAC addresses</th>
           <th>Asset tag</th><th>Site</th><th>Room</th><th>Group tag</th><th>Notes</th><th>Check</th><th></th>
         </tr></thead>
         <tbody id="rows"></tbody>
@@ -160,6 +161,7 @@ input[type=file]{display:none}
     <ul>
       <li><b>Hardware scanner</b> (keyboard wedge, USB or Bluetooth): the badge at the top must say <b>Ready to scan</b>. If it says paused, tap the scan box; inside the Claude app, keystrokes go to the chat box until you click the page. Scanners that end with Enter, Tab or nothing at all are all accepted. Multi-line QR payloads are captured whole, so labels that encode several fields on separate lines still land as one row.</li>
       <li><b>Several photos at once</b>: <b>Choose photos</b> picks any number from the gallery (or a folder on a laptop; you can also drag photos onto the page). Each photo is one label; photos of different labels on the same device merge into its row. <b>Take photo</b> opens the camera for a single shot.</li>
+      <li><b>MAC addresses</b>: a device can have any number (LAN, Wi-Fi, Bluetooth, dock). Every MAC on a label or scanned after the serial is added to that row, separated by semicolons; type extra ones the same way. The export puts each in its own column (MAC 1, MAC 2, …).</li>
       <li><b>Email list</b>: on a phone it opens the share sheet with the Excel file attached; pick your mail app. On a laptop it saves the file and opens a new email with the device list in the body, ready for you to attach the file. Set <b>Email list to</b> above to pre-fill the address.</li>
       <li><b>Phone or webcam</b>: <b>Live scan</b> opens the camera and adds each new code it sees, with a buzz and a green frame. It appears in the downloaded page when opened over https or from the PC's own disk; Claude's viewer does not allow live camera use, so inside Claude use <b>Take photo</b> or <b>Choose photos</b>.</li>
       <li>Understood formats: vendor support URLs (HP <code>?serialnumber=</code>, Dell <code>qrl.dell.com/&lt;tag&gt;</code>, Lenovo <code>pcsupport</code>), Lenovo <code>1S&lt;MTM&gt;&lt;serial&gt;</code> codes, ANSI/ISO box labels (<code>S</code> serial, <code>1P</code> part), GS1 <code>(21)</code> serials, labelled text (<code>S/N</code>, <code>Service Tag</code>, <code>MTM</code>, <code>P/N</code>, <code>VFY:</code>, <code>IMEI</code>, <code>MAC</code>), Apple part numbers (<code>…/A</code>), Samsung model codes, and HP's comma-separated QR (<code>serial,product,model,1y1y0y</code>, where the last part is years of parts/labour/on-site warranty) and HP box QR links (<code>hpsmart.com/QRC/…/21/&lt;serial&gt;?240=&lt;part&gt;</code>).</li>
@@ -202,7 +204,7 @@ function serialish(s){return /^[A-Z0-9]{6,22}$/.test(s)&&(mixed(s)||/^\d{10,14}$
 
 function parse(raw){
   const t=(raw||'').replace(/\r/g,'').trim();
-  const o={make:'',serial:'',product:'',model:'',mac:'',mac2:'',imei:'',warranty:'',gtin:''};
+  const o={make:'',serial:'',product:'',model:'',mac:'',mac2:'',imei:'',warranty:'',gtin:''}; const macs=[];
   // A bare 12-14 digit code with a valid check digit is the retail box barcode (UPC/EAN), not a device id
   if(/^\d{12,14}$/.test(t)&&gtinOk(t)){ o.gtin=t; return o; }
   const setP=v=>{if(v&&!o.product)o.product=v;}, setS=(v,strong=true)=>{if(v&&!o.serial){o.serial=v;o.snStrong=strong;}};
@@ -229,7 +231,7 @@ function parse(raw){
       let k,v; try{k=decodeURIComponent(p.slice(0,i)).toLowerCase().replace(/[^a-z]/g,''); v=decodeURIComponent(p.slice(i+1).replace(/\+/g,' '));}catch(e){continue;}
       if(SER_KEYS.test(k)) setS(cleanTok(v)); else if(PRD_KEYS.test(k)) setP(cleanTok(v));
       else if(/model|productname|name/.test(k)&&!o.model) o.model=v.trim();
-      else if(/mac/.test(k)&&!o.mac) o.mac=v.trim(); }
+      else if(/mac/.test(k)) macs.push(v.trim()); }
     // GS1 Digital Link paths (HP hpsmart.com/QRC/…/01/<GTIN>/21/<serial>)
     { const sg=base.replace(/^https?:\/\/[^/]+/i,'').split('/').filter(Boolean);
       for(let i=0;i<sg.length-1;i++){ let v; try{v=decodeURIComponent(sg[i+1]);}catch(e){continue;}
@@ -245,7 +247,7 @@ function parse(raw){
   let m;
   while((m=kv.exec(t))){
     const k=m[1].toUpperCase().replace(/[\s.]+/g,' ').trim(), v=m[2].trim();
-    if(/MAC/.test(k)&&!/MACHINE/.test(k)){ if(!o.mac) o.mac=v.split(/\s+/)[0]; }
+    if(/MAC/.test(k)&&!/MACHINE/.test(k)){ macs.push(v.split(/\s+/)[0]); }
     else if(/^IMEI/.test(k)){ if(!o.imei) o.imei=cleanTok(v); }
     else if(/^(PRODUCT NAME|MODEL NAME|DESCRIPTION)$/.test(k)){ if(!o.model) o.model=v.replace(/\s{2,}.*/,'').slice(0,80); }
     else if(k==='MODEL'){ if(/\s/.test(v.trim())&&!o.model) o.model=v.slice(0,80); else setP(cleanTok(v)); }
@@ -264,7 +266,7 @@ function parse(raw){
   // Patterns found anywhere in the text
   const U=t.toUpperCase();
   let x;
-  { const ms=[...U.matchAll(new RegExp(MAC_RE.source,'g'))].map(z=>z[1]); if(!o.mac&&ms[0]) o.mac=ms[0]; const m2=ms.find(z=>z.replace(/\W/g,'')!==o.mac.toUpperCase().replace(/\W/g,'')); if(m2) o.mac2=m2; }
+  macs.push(...[...U.matchAll(new RegExp(MAC_RE.source,'g'))].map(z=>z[1]));
   if(!o.imei&&(x=U.match(/\b(\d{15})\b/))&&/IMEI/i.test(t)) o.imei=x[1];
   if(!o.product&&(x=U.match(/\b([MZ][A-Z0-9]{3,4}[A-Z]{0,2}\d?[A-Z]{0,2}\/A)\b/))){o.product=x[1];o.make||='Apple';}
   if(!o.product&&(x=U.match(/\b(NP\d{3}[A-Z0-9]{2,4}-[A-Z0-9]{3,7}|SM-[A-Z]\d{3}[A-Z0-9]{0,4})\b/))){o.product=x[1];o.make||='Samsung';}
@@ -272,7 +274,7 @@ function parse(raw){
 
   // HP component labels: P/N and SPS spare numbers like L13899-001
   const spares=[...new Set([...U.matchAll(/\b([A-Z0-9]\d{5}-\d{3})\b/g)].map(z=>z[1]))];
-  if(!o.mac&&(x=U.match(/\bMAC[:\s\-]*([0-9A-F]{12})\b/))) o.mac=x[1];
+  macs.push(...[...U.matchAll(/\bMAC[:\s\-]*([0-9A-F]{12})\b/g)].map(z=>z[1]));
   // Bare tokens
   const toks=U.split(/[\s,;|\\]+/).map(s=>s.replace(/^[^A-Z0-9]+|[^A-Z0-9#]+$/g,'')).filter(s=>s&&!/^[A-Z0-9]\d{5}-\d{3}$/.test(s)&&!/^MAC[0-9A-F]{12}$/.test(s));
   for(const tok0 of toks){
@@ -302,10 +304,12 @@ function parse(raw){
   // Lone 7-character code with nothing else is a Dell service tag
   if(!o.make&&DELL_TAG.test(o.serial)&&mixed(o.serial)&&!o.product){ o.make='Dell'; o.snStrong=true; }
   if(!o.make&&/^\d{12}$/.test(o.serial)&&!o.product) o.make='Microsoft';
-  if(o.mac){const h=o.mac.toUpperCase().replace(/[^0-9A-F]/g,''); o.mac=h.length===12?h.match(/../g).join(':'):o.mac;}
+  o.mac=joinMacs(macs);
   return o;
 }
 function gtinOk(d){ const n=d.split('').map(Number), c=n.pop(); let s=0; n.reverse().forEach((v,i)=>s+=v*(i%2?1:3)); return (10-s%10)%10===c; }
+function macList(v){ return [...new Set(String(v||'').split(/[;,\s]+/).map(fmtMac).filter(m=>/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(m)))]; }
+function joinMacs(a){ return macList((Array.isArray(a)?a:[a]).join(';')).join('; '); }
 function fmtMac(m){ const h=(m||'').toUpperCase().replace(/[^0-9A-F]/g,''); return h.length===12?h.match(/../g).join(':'):m; }
 function buildEst(sn,make){
   if(make&&make!=='HP') return '';
@@ -326,7 +330,8 @@ const WARRANTY={HP:()=>'https://support.hp.com/gb-en/check-warranty',
 /* ---------- store: account db when available, browser storage otherwise ---------- */
 const LS='hp-intake-v1';
 let rows=[], settings={}, db=null, col=null, setDoc=null;
-function lsLoad(){try{const j=JSON.parse(localStorage.getItem(LS)||'{}');rows=j.rows||[];settings=j.settings||{};}catch(e){}}
+function migrate(list){ list.forEach(r=>{ const m=(r.notes||'').match(/MAC2 ([0-9A-F:]{17})/i); if(m){ r.mac=joinMacs([r.mac,m[1]]); r.notes=r.notes.replace(/;?\s*MAC2 [0-9A-F:]{17}/i,'').replace(/^;\s*/,''); } }); return list; }
+function lsLoad(){try{const j=JSON.parse(localStorage.getItem(LS)||'{}');rows=migrate(j.rows||[]);settings=j.settings||{};}catch(e){}}
 function lsSave(){try{localStorage.setItem(LS,JSON.stringify({rows,settings}));}catch(e){}}
 lsLoad();
 const store={
@@ -355,7 +360,7 @@ function dbErr(e){ say('Account save failed ('+(e&&e.code||'error')+'). Rows are
       const remote=snap.docs.map(x=>({...x.data(),id:x.id}));
       if(first){ first=false; const have=new Set(remote.map(r=>r.id));
         local.filter(r=>!have.has(r.id)).forEach(r=>{col.doc(r.id).set(r).catch(dbErr);remote.push(r);}); }
-      rows=remote.sort((a,b)=>(a.ts||0)-(b.ts||0)); lsSave(); render();
+      rows=migrate(remote.sort((a,b)=>(a.ts||0)-(b.ts||0))); lsSave(); render();
     },e=>{ $('#sync').textContent='Local only'; col=null; setDoc=null; });
   }catch(e){}
 })();
@@ -364,7 +369,7 @@ function dbErr(e){ say('Account save failed ('+(e&&e.code||'error')+'). Rows are
 let hitId=null;
 function ingest(raw,source){
   raw=(raw||'').trim(); if(!raw) return 'none';
-  const p=parse(raw); if(p.mac2) p.mac2=fmtMac(p.mac2);
+  const p=parse(raw);
   // Same device again (e.g. QR photo, then the S/N label): fill gaps in its row instead of adding a new one
   if(p.serial){ const dup=rows.find(r=>r.serial===p.serial&&(!r.make||!p.make||r.make===p.make));
     if(dup){ const n=mergeInto(dup,p); hitId=dup.id; render();
@@ -388,7 +393,7 @@ function ingest(raw,source){
     beep(220); return 'none'; }
   const r={id:'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), ts:Date.now(),
     make:p.make, serial:p.serial, snWeak:!!(p.serial&&!p.snStrong), product:p.product+(p.loc&&p.product&&!p.product.includes('#')?'#'+p.loc:''), model:p.model, modelAi:false, mac:p.mac, built:buildEst(p.serial,p.make), warranty:p.warranty||'',
-    asset:'', site:settings.site||'', room:settings.room||'', tag:settings.tag||'', po:settings.po||'', notes:[p.imei&&'IMEI '+p.imei,p.mac2&&'MAC2 '+p.mac2,p.sps&&'Spare '+p.sps].filter(Boolean).join('; '), raw, source};
+    asset:'', site:settings.site||'', room:settings.room||'', tag:settings.tag||'', po:settings.po||'', notes:[p.imei&&'IMEI '+p.imei,p.sps&&'Spare '+p.sps].filter(Boolean).join('; '), raw, source};
   hitId=r.id; store.add(r);
   const miss=[!p.make&&'make',!p.serial&&'serial',!p.product&&p.make!=='Dell'&&'part no.'].filter(Boolean);
   say('Added '+(p.make?p.make+' ':'')+(p.serial||p.product)+(miss.length?' (missing '+miss.join(', ')+')':''),miss.length?'warn':'ok');
@@ -452,7 +457,8 @@ function prodCompat(a,b){ return !a||!b||pbase(a)===pbase(b)||SPARE.test(a)||SPA
 function mergeInto(r,p){
   const patch={}, got=[], notes=[];
   const fill=(k,label)=>{ if(p[k]&&!r[k]){ patch[k]=p[k]; got.push(label); } };
-  fill('make','make'); fill('model','model'); fill('mac','MAC'); fill('warranty','warranty');
+  fill('make','make'); fill('model','model'); fill('warranty','warranty');
+  { const have=macList(r.mac), add=macList(p.mac).filter(m=>!have.includes(m)); if(add.length){ patch.mac=joinMacs(have.concat(add)); got.push(add.length>1?add.length+' MACs':(have.length?'MAC '+(have.length+1):'MAC')); } }
   if(p.serial){
     if(!r.serial){ patch.serial=p.serial; patch.snWeak=!p.snStrong; got.push('serial'); }
     else if(r.snWeak&&p.snStrong&&p.serial!==r.serial){ patch.serial=p.serial; patch.snWeak=false; got.push('serial'); }
@@ -467,8 +473,6 @@ function mergeInto(r,p){
   if(p.sps&&!(r.notes||'').includes(p.sps)){ notes.push('Spare '+p.sps); got.push('spare no.'); }
   const prod=patch.product||r.product||'';
   if(p.loc&&prod&&!prod.includes('#')){ patch.product=prod+'#'+p.loc; got.push('locale'); }
-  if(p.mac&&r.mac&&fmtMac(p.mac)!==fmtMac(r.mac)&&!(r.notes||'').includes(fmtMac(p.mac))) p.mac2=p.mac2||p.mac;
-  if(p.mac2&&!(r.notes||'').includes(fmtMac(p.mac2))&&fmtMac(p.mac2)!==fmtMac(r.mac||patch.mac)){ notes.push('MAC2 '+fmtMac(p.mac2)); got.push('MAC 2'); }
   if(notes.length) patch.notes=[r.notes,...notes].filter(Boolean).join('; ');
   patch.lastTs=Date.now();
   if(patch.serial||patch.make) patch.built=buildEst(patch.serial||r.serial,patch.make||r.make);
@@ -543,16 +547,18 @@ function importTable(tb,name){
   if(!tb.length){ say(name+' is empty.','warn'); return; }
   const head=tb[0].map(h=>String(h).trim()), map={};
   head.forEach((h,i)=>{ for(const [k,re] of IMPORT_COLS) if(!(k in map)&&re.test(h)){ map[k]=i; break; } });
+  const macCols=head.map((h,i)=>/^mac/i.test(h)?i:-1).filter(i=>i>=0);
   // A device list (this page's export, or any sheet with a serial column): restore rows directly
   if('serial' in map&&(('product' in map)||('make' in map)||('mac' in map))){
     const c={added:0,updated:0,dup:0,skipped:0};
     tb.slice(1).forEach(r=>{ const v=k=>k in map?String(r[map[k]]??'').trim():'';
       const serial=v('serial').toUpperCase(); if(!serial){ c.skipped++; return; }
       let model=v('model'), ai=false; if(/\s\(AI\)$/.test(model)){ model=model.replace(/\s\(AI\)$/,''); ai=true; }
-      const rec={make:v('make'),serial,product:v('product').toUpperCase(),model,modelAi:ai,built:v('built'),warranty:v('warranty'),mac:v('mac')?fmtMac(v('mac')):'',
+      const rec={make:v('make'),serial,product:v('product').toUpperCase(),model,modelAi:ai,built:v('built'),warranty:v('warranty'),mac:joinMacs(macCols.map(i=>String(r[i]??''))),
         asset:v('asset'),site:v('site'),room:v('room'),tag:v('tag'),po:v('po'),notes:v('notes'),raw:v('raw')};
       const ex=rows.find(x=>x.serial===serial);
       if(ex){ const patch={}; for(const k in rec) if(rec[k]&&!ex[k]&&k!=='modelAi'){ patch[k]=rec[k]; if(k==='model') patch.modelAi=ai; }
+        if(rec.mac&&ex.mac){ const u=joinMacs([ex.mac,rec.mac]); if(u!==ex.mac) patch.mac=u; }
         if(Object.keys(patch).length){ store.update(ex.id,patch); c.updated++; } else c.dup++; return; }
       if(!rec.built) rec.built=buildEst(serial,rec.make);
       store.add(Object.assign({id:'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),ts:Date.now(),snWeak:false,source:'import'},rec)); c.added++; });
@@ -827,8 +833,10 @@ $('#clearBtn').addEventListener('click',e=>{
 });
 
 /* ---------- export ---------- */
-const HEAD=[['make','Make'],['serial','Serial Number'],['product','Part / MTM'],['model','Model'],['built','Built (est.)'],['warranty','Warranty (parts/labour/on-site yrs)'],['wend','Warranty End'],['wstart','Warranty Start'],['wtype','Warranty Type'],['mac','MAC Address'],['asset','Asset Tag'],['site','Site'],['room','Room'],['tag','Group Tag'],['po','PO / Order Ref'],['notes','Notes'],['scanned','Scanned'],['raw','Raw QR Data']];
-function table(){return rows.map(r=>{const o={};HEAD.forEach(([k,h])=>{o[h]=k==='scanned'?new Date(r.ts).toLocaleString('en-GB'):k==='model'&&r.modelAi&&r.model?r.model+' (AI)':(r[k]||'');});return o;});}
+const HEAD0=[['make','Make'],['serial','Serial Number'],['product','Part / MTM'],['model','Model'],['built','Built (est.)'],['warranty','Warranty (parts/labour/on-site yrs)'],['wend','Warranty End'],['wstart','Warranty Start'],['wtype','Warranty Type'],['mac','MAC Address'],['asset','Asset Tag'],['site','Site'],['room','Room'],['tag','Group Tag'],['po','PO / Order Ref'],['notes','Notes'],['scanned','Scanned'],['raw','Raw QR Data']];
+function heads(){ const n=Math.max(1,...rows.map(r=>macList(r.mac).length)); const out=[];
+  HEAD0.forEach(x=>{ if(x[0]==='mac') for(let i=1;i<=n;i++) out.push(['mac'+i,'MAC '+i]); else out.push(x); }); return out; }
+function table(){const H=heads();return rows.map(r=>{const o={}, ms=macList(r.mac);H.forEach(([k,h])=>{o[h]=/^mac\d+$/.test(k)?(ms[+k.slice(3)-1]||''):k==='scanned'?new Date(r.ts).toLocaleString('en-GB'):k==='model'&&r.modelAi&&r.model?r.model+' (AI)':(r[k]||'');});return o;});}
 function stamp(){const d=new Date();return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');}
 function fname(ext){const s=(settings.site||'devices').replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'');return 'Device-intake_'+s+'_'+stamp()+'.'+ext;}
 let dl=null; (async()=>{try{dl=await window.claude?.use?.('downloads');}catch(e){}})();
@@ -842,8 +850,8 @@ async function save(filename,data){
 }
 function needRows(){if(!rows.length){say('Nothing to export yet.','warn');return false;}return true;}
 function buildXlsx(){
-  const ws=XLSX.utils.json_to_sheet(table(),{header:HEAD.map(h=>h[1])});
-  ws['!cols']=HEAD.map(([k])=>({wch:{serial:14,product:14,model:28,raw:50,notes:24,mac:18,scanned:18}[k]||14}));
+  const H=heads(); const ws=XLSX.utils.json_to_sheet(table(),{header:H.map(h=>h[1])});
+  ws['!cols']=H.map(([k])=>({wch:/^mac/.test(k)?18:({serial:14,product:14,model:28,raw:50,notes:24,scanned:18}[k]||14)}));
   ws['!autofilter']={ref:ws['!ref']};
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Devices');
   // Autopilot-style sheet: serial plus group tag, for reconciliation against the hash import.
@@ -876,12 +884,12 @@ $('#mailBtn').addEventListener('click',async()=>{
 function csvCell(v){v=String(v??'');return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
 $('#csvBtn').addEventListener('click',()=>{
   if(!needRows()) return;
-  const t=table(),h=HEAD.map(x=>x[1]);
+  const t=table(),h=heads().map(x=>x[1]);
   save(fname('csv'),'﻿'+[h.map(csvCell).join(','),...t.map(o=>h.map(k=>csvCell(o[k])).join(','))].join('\r\n'));
 });
 $('#copyBtn').addEventListener('click',()=>{
   if(!needRows()) return;
-  const t=table(),h=HEAD.map(x=>x[1]).filter(x=>x!=='Raw QR Data');
+  const t=table(),h=heads().map(x=>x[1]).filter(x=>x!=='Raw QR Data');
   const txt=[h.join('\t'),...t.map(o=>h.map(k=>String(o[k]).replace(/[\t\n]/g,' ')).join('\t'))].join('\n');
   try{navigator.clipboard.writeText(txt).then(()=>say('Copied '+rows.length+' rows. Paste into Excel.','ok'),()=>fallbackCopy(txt));}catch(e){fallbackCopy(txt);}
 });
