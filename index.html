@@ -102,8 +102,10 @@ input[type=file]{display:none}
   <div class="scanrow">
     <div class="scanbox"><textarea id="scan" rows="1" placeholder="Scan any device label QR or barcode, or type a serial and press Enter" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Scan input"></textarea></div>
     <button class="btn primary" id="liveBtn" type="button" hidden>Live scan</button>
-    <button class="btn" id="photoBtn" type="button">Photo of label</button>
-    <input type="file" id="photo" accept="image/*" capture="environment" multiple>
+    <button class="btn" id="photoBtn" type="button">Take photo</button>
+    <button class="btn" id="photosBtn" type="button" title="Pick one or many label photos from the gallery or a folder">Choose photos</button>
+    <input type="file" id="photo" accept="image/*" capture="environment">
+    <input type="file" id="photos" accept="image/*" multiple>
     <input type="file" id="listFile" accept=".csv,.txt,.xlsx,.xls,text/plain,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
   </div>
   <div class="status" id="status" role="status" aria-live="polite">Ready. Scanner input goes into the box above.</div>
@@ -123,6 +125,7 @@ input[type=file]{display:none}
     <label class="f">Room / location<input id="d_room" placeholder="e.g. ICT Suite 2"></label>
     <label class="f">Autopilot group tag<input id="d_tag" placeholder="e.g. SMP-Student"></label>
     <label class="f">PO / order ref<input id="d_po" placeholder="optional"></label>
+    <label class="f">Email list to<input id="d_email" type="email" placeholder="e.g. orders@dataspire.co.uk" autocomplete="email"></label>
   </section>
 
   <section style="display:grid;gap:10px">
@@ -133,6 +136,7 @@ input[type=file]{display:none}
       <button class="btn" id="copyBtn" type="button">Copy for Excel</button>
       <button class="btn" id="csvBtn" type="button">CSV</button>
       <button class="btn primary" id="xlsxBtn" type="button">Export .xlsx</button>
+      <button class="btn primary" id="mailBtn" type="button" title="Send the Excel list by email">Email list</button>
       <button class="btn danger" id="clearBtn" type="button">Clear all</button>
     </div>
     <div class="tablewrap">
@@ -155,7 +159,9 @@ input[type=file]{display:none}
     <summary>How scanning works</summary>
     <ul>
       <li><b>Hardware scanner</b> (keyboard wedge, USB or Bluetooth): the badge at the top must say <b>Ready to scan</b>. If it says paused, tap the scan box; inside the Claude app, keystrokes go to the chat box until you click the page. Scanners that end with Enter, Tab or nothing at all are all accepted. Multi-line QR payloads are captured whole, so labels that encode several fields on separate lines still land as one row.</li>
-      <li><b>Phone or webcam</b>: <b>Live scan</b> opens the camera and adds each new code it sees, with a buzz and a green frame. It appears in the downloaded page when opened over https or from the PC's own disk; Claude's viewer does not allow live camera use, so inside Claude use <b>Photo of label</b> (several photos can be picked at once).</li>
+      <li><b>Several photos at once</b>: <b>Choose photos</b> picks any number from the gallery (or a folder on a laptop; you can also drag photos onto the page). Each photo is one label; photos of different labels on the same device merge into its row. <b>Take photo</b> opens the camera for a single shot.</li>
+      <li><b>Email list</b>: on a phone it opens the share sheet with the Excel file attached; pick your mail app. On a laptop it saves the file and opens a new email with the device list in the body, ready for you to attach the file. Set <b>Email list to</b> above to pre-fill the address.</li>
+      <li><b>Phone or webcam</b>: <b>Live scan</b> opens the camera and adds each new code it sees, with a buzz and a green frame. It appears in the downloaded page when opened over https or from the PC's own disk; Claude's viewer does not allow live camera use, so inside Claude use <b>Take photo</b> or <b>Choose photos</b>.</li>
       <li>Understood formats: vendor support URLs (HP <code>?serialnumber=</code>, Dell <code>qrl.dell.com/&lt;tag&gt;</code>, Lenovo <code>pcsupport</code>), Lenovo <code>1S&lt;MTM&gt;&lt;serial&gt;</code> codes, ANSI/ISO box labels (<code>S</code> serial, <code>1P</code> part), GS1 <code>(21)</code> serials, labelled text (<code>S/N</code>, <code>Service Tag</code>, <code>MTM</code>, <code>P/N</code>, <code>VFY:</code>, <code>IMEI</code>, <code>MAC</code>), Apple part numbers (<code>…/A</code>), Samsung model codes, and HP's comma-separated QR (<code>serial,product,model,1y1y0y</code>, where the last part is years of parts/labour/on-site warranty) and HP box QR links (<code>hpsmart.com/QRC/…/21/&lt;serial&gt;?240=&lt;part&gt;</code>).</li>
       <li><b>Phone barcode apps</b>: apps that type into the PC (keyboard mode, e.g. Barcode to PC) work like a USB scanner. For apps that keep a scan history, export or share it as .csv or .txt and use <b>Import list</b>. Import list also reloads a list exported from this page (.xlsx or .csv), adding new devices and filling gaps in existing ones, or paste the list onto the page: each line becomes its own device.</li>
       <li><b>Etched codes</b> (laser-marked Data Matrix or QR on metal or dark plastic): a photo gets a slower second attempt with contrast boosted, which often works for etched QR codes. Etched Data Matrix codes on brushed metal are rarely readable from a photo; use a USB or Bluetooth 2D scanner for those.</li>
@@ -509,6 +515,7 @@ window.addEventListener('focus',focusState); window.addEventListener('blur',focu
 document.addEventListener('click',e=>{ if(!editable(e.target)&&!e.target.closest('button,a,summary,label')) scanEl.focus({preventScroll:true}); });
 
 $('#photoBtn').addEventListener('click',()=>$('#photo').click());
+$('#photosBtn').addEventListener('click',()=>$('#photos').click());
 $('#importBtn').addEventListener('click',()=>$('#listFile').click());
 $('#listFile').addEventListener('change',async e=>{ const f=e.target.files[0]; e.target.value=''; if(!f) return;
   try{
@@ -566,8 +573,8 @@ const cam=$('#cam'), camv=$('#camv');
 let camAlt=false, stream=null, camOn=false, det=null, lastTxt='', lastAt=0, camN=0, cCan=null, cCtx=null;
 async function startCam(){
   try{ stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}}); }
-  catch(e){ say(e&&e.name==='NotAllowedError'?'Camera access was blocked. Allow the camera for this page in the browser settings, or use Photo of label.':
-      (location.protocol==='http:'?'The camera only works over https. Use Photo of label, or open the page over https.':'No camera could be opened ('+(e&&e.name||'error')+'). Use Photo of label.'),'bad'); return; }
+  catch(e){ say(e&&e.name==='NotAllowedError'?'Camera access was blocked. Allow the camera for this page in the browser settings, or use Take photo.':
+      (location.protocol==='http:'?'The camera only works over https. Use Take photo, or open the page over https.':'No camera could be opened ('+(e&&e.name||'error')+'). Use Take photo.'),'bad'); return; }
   cam.hidden=false; camN=0; $('#camCount').textContent='0 scanned';
   camv.srcObject=stream; try{await camv.play();}catch(e){}
   det=null;
@@ -614,15 +621,29 @@ $('#torchBtn').addEventListener('click',async e=>{ const b=e.currentTarget, tr=s
   const on=!b.classList.contains('on'); try{ await tr.applyConstraints({advanced:[{torch:on}]}); b.classList.toggle('on',on);}catch(x){} });
 document.addEventListener('visibilitychange',()=>{ if(document.hidden&&camOn) stopCam(); });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&camOn) stopCam(); });
-$('#photo').addEventListener('change',async e=>{
-  const files=[...e.target.files]; e.target.value=''; if(!files.length) return;
-  say('Reading '+files.length+' photo'+(files.length>1?'s':'')+'…');
-  let found=0;
-  for(const f of files){ const codes=await decodeImage(f).catch(()=>[]);
-    if(!codes.length){ say('No code found in '+f.name+'. Retake closer, square-on and in focus, with the flash off. Codes etched into metal or dark plastic read best with a USB 2D scanner.','bad'); continue; }
-    ingest(labelText(codes),'photo'); found++; }
-  if(found>1) say('Added from '+found+' photos.','ok');
-});
+let photoBusy=false;
+async function processPhotos(files){
+  files=files.filter(f=>/^image\//.test(f.type)||/\.(jpe?g|png|heic|webp|bmp)$/i.test(f.name)); if(!files.length) return;
+  if(photoBusy){ say('Still reading the previous photos. Add these when it finishes.','warn'); return; }
+  photoBusy=true; const c={added:0,updated:0,dup:0,none:0}, missed=[];
+  try{
+    for(let i=0;i<files.length;i++){ const f=files[i];
+      say('Reading photo '+(i+1)+' of '+files.length+'…'); await new Promise(r=>setTimeout(r,20));
+      const codes=await decodeImage(f).catch(()=>[]);
+      if(!codes.length){ missed.push(f.name); c.none++; continue; }
+      c[ingest(labelText(codes),'photo')||'none']++; }
+  } finally { photoBusy=false; }
+  if(files.length===1&&!missed.length) return;
+  if(files.length===1){ say('No code found in '+missed[0]+'. Retake closer, square-on and in focus, with the flash off.','bad'); return; }
+  say(files.length+' photos: '+c.added+' added, '+c.updated+' updated, '+c.dup+' already in the list'+(c.none?', '+c.none+' with nothing usable'+(missed.length?' (no code found: '+missed.slice(0,4).join(', ')+(missed.length>4?'…':'')+')':''):''),c.none?'warn':'ok');
+}
+$('#photo').addEventListener('change',e=>{ const f=[...e.target.files]; e.target.value=''; processPhotos(f); });
+$('#photos').addEventListener('change',e=>{ const f=[...e.target.files]; e.target.value=''; processPhotos(f); });
+// Drop photos or an exported list anywhere on the page
+document.addEventListener('dragover',e=>{ if([...(e.dataTransfer?.types||[])].includes('Files')) e.preventDefault(); });
+document.addEventListener('drop',async e=>{ const fs=[...(e.dataTransfer?.files||[])]; if(!fs.length) return; e.preventDefault();
+  const lists=fs.filter(f=>/\.(csv|txt|xlsx?)$/i.test(f.name)); for(const f of lists){ const dt=new DataTransfer(); dt.items.add(f); const inp=$('#listFile'); inp.files=dt.files; inp.dispatchEvent(new Event('change')); }
+  processPhotos(fs.filter(f=>!lists.includes(f))); });
 async function decodeImage(file){
   const bmp=await createImageBitmap(file).catch(async()=>{const img=new Image();img.src=URL.createObjectURL(file);await img.decode();return img;});
   const out=[];
@@ -746,7 +767,7 @@ function labelText(codes){ const useful=codes.filter(c=>!GTIN_FMT.test(c.format|
   return use.sort((a,b)=>(b.qr?1:0)-(a.qr?1:0)).map(c=>c.text).join('\n'); }
 
 /* ---------- defaults ---------- */
-const dmap={site:'#d_site',room:'#d_room',tag:'#d_tag',po:'#d_po'};
+const dmap={site:'#d_site',room:'#d_room',tag:'#d_tag',po:'#d_po',email:'#d_email'};
 function fillDefaults(){for(const k in dmap) $(dmap[k]).value=settings[k]||'';}
 fillDefaults();
 let setT=null;
@@ -820,9 +841,7 @@ async function save(filename,data){
   catch(e){ if(e&&e.code==='declined') say('Save cancelled.'); else say('Could not save the file ('+(e&&e.code||'error')+'). Use Copy for Excel instead.','bad'); }
 }
 function needRows(){if(!rows.length){say('Nothing to export yet.','warn');return false;}return true;}
-$('#xlsxBtn').addEventListener('click',()=>{
-  if(!needRows()) return;
-  if(typeof XLSX==='undefined'){say('Spreadsheet library did not load. Use CSV or Copy for Excel.','bad');return;}
+function buildXlsx(){
   const ws=XLSX.utils.json_to_sheet(table(),{header:HEAD.map(h=>h[1])});
   ws['!cols']=HEAD.map(([k])=>({wch:{serial:14,product:14,model:28,raw:50,notes:24,mac:18,scanned:18}[k]||14}));
   ws['!autofilter']={ref:ws['!ref']};
@@ -830,8 +849,29 @@ $('#xlsxBtn').addEventListener('click',()=>{
   // Autopilot-style sheet: serial plus group tag, for reconciliation against the hash import.
   const ap=XLSX.utils.json_to_sheet(rows.filter(r=>r.serial).map(r=>({'Device Serial Number':r.serial,'Manufacturer':r.make||'','Model':r.model||'','Group Tag':r.tag||'','Part / MTM':r.product||''})));
   XLSX.utils.book_append_sheet(wb,ap,'Autopilot check');
-  const buf=XLSX.write(wb,{type:'array',bookType:'xlsx'});
-  save(fname('xlsx'),buf);
+  return XLSX.write(wb,{type:'array',bookType:'xlsx'});
+}
+$('#xlsxBtn').addEventListener('click',()=>{
+  if(!needRows()) return;
+  if(typeof XLSX==='undefined'){say('Spreadsheet library did not load. Use CSV or Copy for Excel.','bad');return;}
+  save(fname('xlsx'),buildXlsx());
+});
+$('#mailBtn').addEventListener('click',async()=>{
+  if(!needRows()) return;
+  if(typeof XLSX==='undefined'){say('Spreadsheet library did not load. Use Copy for Excel and paste into an email.','bad');return;}
+  const name=fname('xlsx'), buf=buildXlsx(), site=settings.site||'';
+  const subject='Device intake'+(site?' - '+site:'')+' - '+rows.length+' device'+(rows.length===1?'':'s')+' - '+new Date().toLocaleDateString('en-GB');
+  const lines=rows.slice(0,40).map(r=>[r.make,r.serial,r.product,r.model].filter(Boolean).join('  '));
+  const body='Device list attached ('+name+').\n\n'+(site?'Site: '+site+'\n':'')+(settings.po?'PO: '+settings.po+'\n':'')+'Devices: '+rows.length+'\n\n'+lines.join('\n')+(rows.length>40?'\n…and '+(rows.length-40)+' more in the attachment':'');
+  // Phones: hand the file to the mail app as an attachment through the share sheet
+  try{ const file=new File([buf],name,{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){ await navigator.share({files:[file],title:subject,text:body}); say('Shared '+name+'. Pick your mail app and send it'+(settings.email?' to '+settings.email:'')+'.','ok'); return; } }
+  catch(e){ if(e&&e.name==='AbortError'){ say('Email cancelled.'); return; } }
+  // Laptops: save the file, then open a pre-filled email to attach it to
+  await save(name,buf);
+  const to=settings.email||'';
+  if(!window.claude){ const a=document.createElement('a'); a.href='mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body.slice(0,1500)); a.click(); }
+  say('Saved '+name+'. Attach it to '+(window.claude?'an email':'the email that just opened')+(to?' to '+to:'')+' (it is in your Downloads folder).','ok');
 });
 function csvCell(v){v=String(v??'');return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
 $('#csvBtn').addEventListener('click',()=>{
