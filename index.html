@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="en-GB"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>[hidden]{display:none!important}body{margin:0}img{max-width:100%}</style>
+<title>Device Asset Intake</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: sticky scan bar on top, session defaults strip, then the intake register (table, scrolls sideways on phones). */
+:root{
+  --bg:#eef1f4; --panel:#ffffff; --ink:#16202b; --muted:#5b6878; --line:#d3dae2;
+  --accent:#0b5cad; --accent-ink:#ffffff; --flash:#f2b01e; --ok:#1f7a4d; --warn:#b25e00; --bad:#b3261e;
+  --chip:#e3e9f0;
+  --f-display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f151c; --panel:#18212b; --ink:#e6ecf2; --muted:#93a1b1; --line:#2b3744;
+  --accent:#4f9cf0; --accent-ink:#06121f; --flash:#f2b01e; --ok:#4cc38a; --warn:#f0a24a; --bad:#ff7a70; --chip:#223040; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f151c; --panel:#18212b; --ink:#e6ecf2; --muted:#93a1b1; --line:#2b3744;
+  --accent:#4f9cf0; --accent-ink:#06121f; --flash:#f2b01e; --ok:#4cc38a; --warn:#f0a24a; --bad:#ff7a70; --chip:#223040; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--panel)}
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));max-width:1280px;margin:0 auto}
+header.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--panel);border-bottom:1px solid var(--line)}
+header .wrap{padding-block:12px;display:grid;gap:10px}
+.brand{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-family:var(--f-display);font-weight:700;font-size:26px;letter-spacing:.02em;margin:0;text-transform:uppercase;text-wrap:balance}
+.sync{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.armed{font:600 12px var(--f-body);letter-spacing:.04em;padding:3px 10px;border-radius:99px;background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok);margin-right:auto}
+.paused .armed{background:color-mix(in srgb,var(--bad) 14%,transparent);color:var(--bad)}
+.paused #scan{border-color:var(--bad)}
+.scanrow{display:flex;gap:8px;flex-wrap:wrap}
+.scanbox{flex:1 1 260px;min-width:0;position:relative}
+#scan{width:100%;font-family:var(--f-mono);font-size:16px;padding:12px 14px;border:2px solid var(--accent);border-radius:6px;background:var(--bg);color:var(--ink);resize:none;height:50px;line-height:1.5;overflow:hidden}
+#scan:focus{outline:3px solid color-mix(in srgb,var(--accent) 35%,transparent);outline-offset:1px}
+#scan.flash{animation:flash .5s}
+@keyframes flash{0%{background:var(--flash)}100%{background:var(--bg)}}
+@media (prefers-reduced-motion:reduce){#scan.flash{animation:none}}
+.btn{font:600 14px var(--f-body);border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:6px;padding:0 14px;min-height:44px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:hover{border-color:var(--accent)}
+.btn:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.danger{color:var(--bad)}
+.btn.armed{background:var(--bad);color:#fff;border-color:var(--bad)}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.status{font-size:13px;color:var(--muted);min-height:1.45em}
+.status.ok{color:var(--ok)} .status.warn{color:var(--warn)} .status.bad{color:var(--bad)}
+main .wrap{padding-block:16px 40px;display:grid;gap:18px}
+.defaults{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px}
+.defaults .lbl{grid-column:1/-1;font:600 11px var(--f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+label.f{display:grid;gap:4px;font-size:12px;color:var(--muted);min-width:0}
+label.f input{font:15px var(--f-body);padding:9px 10px;border:1px solid var(--line);border-radius:5px;background:var(--bg);color:var(--ink);width:100%}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.toolbar .count{margin-right:auto;font-family:var(--f-display);font-size:22px;font-weight:600}
+.count small{font-family:var(--f-body);font-size:13px;color:var(--muted);font-weight:400;margin-left:6px}
+.tablewrap{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;min-width:1140px;font-size:14px}
+th{font:600 11px var(--f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--panel);position:sticky;top:0}
+td{padding:4px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+tr.hit td{background:color-mix(in srgb,var(--flash) 22%,transparent)}
+td.mono,td input.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:13px}
+td input{font:14px var(--f-body);border:1px solid transparent;background:transparent;color:var(--ink);padding:6px;border-radius:4px;width:100%;min-width:90px}
+td input:hover{border-color:var(--line)} td input:focus{border-color:var(--accent);background:var(--bg);outline:none}
+td.n{color:var(--muted);font-family:var(--f-mono);font-size:12px;width:36px}
+.pill{display:inline-block;font:600 11px var(--f-body);letter-spacing:.04em;padding:3px 8px;border-radius:99px;background:var(--chip);color:var(--muted);white-space:nowrap}
+.pill.ok{color:var(--ok)} .pill.warn{color:var(--warn)} .pill.ex{color:var(--accent)}
+.ai{font-size:10px;color:var(--warn);font-weight:600;letter-spacing:.06em;margin-left:4px}
+.rowact{display:flex;gap:2px}
+.icon{border:0;background:transparent;color:var(--muted);cursor:pointer;min-width:36px;min-height:36px;border-radius:4px;font-size:16px}
+.icon:hover{color:var(--bad);background:var(--chip)}
+a.lnk{color:var(--accent);font-size:13px;white-space:nowrap}
+.empty{padding:28px 18px;text-align:center;color:var(--muted);display:grid;gap:10px;justify-items:center}
+.empty h2{font-family:var(--f-display);font-size:22px;color:var(--ink);margin:0;text-transform:uppercase;letter-spacing:.02em}
+.empty p{margin:0;max-width:56ch}
+details.help{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 14px}
+details.help summary{cursor:pointer;font-weight:600}
+details.help ul{margin:8px 0 0;padding-left:20px;color:var(--muted);max-width:75ch}
+details.help code{font-family:var(--f-mono);font-size:12.5px;background:var(--chip);padding:1px 4px;border-radius:3px}
+.raw{font-family:var(--f-mono);font-size:11px;color:var(--muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+input[type=file]{display:none}
+.cam{position:fixed;inset:0;z-index:30;background:#000;display:grid}
+.cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.cam .reticle{position:absolute;left:50%;top:50%;width:min(70vw,70vh,420px);aspect-ratio:1;transform:translate(-50%,-50%);border:3px solid rgba(255,255,255,.85);border-radius:14px;box-shadow:0 0 0 100vmax rgba(0,0,0,.35);transition:border-color .15s}
+.cam.hit .reticle{border-color:#4cc38a}
+.cam .camtop{position:absolute;left:0;right:0;top:0;display:flex;gap:8px;align-items:center;padding:calc(12px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) 12px max(16px,env(safe-area-inset-left,0px));background:linear-gradient(rgba(0,0,0,.7),transparent);color:#fff}
+.cam .camtop span{margin-right:auto;font-weight:600}
+.cam .camlast{position:absolute;left:0;right:0;bottom:0;padding:16px max(16px,env(safe-area-inset-right,0px)) calc(20px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));background:linear-gradient(transparent,rgba(0,0,0,.8));color:#fff;font-size:15px;min-height:4em}
+.cam .camlast b{display:block;font-family:var(--f-display);font-size:22px;letter-spacing:.02em}
+.cam .btn{background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.4)}
+.cam .btn.on{background:#f2b01e;color:#111}
+</style>
+</head><body>
+
+
+<header class="bar"><div class="wrap">
+  <div class="brand"><h1>Device Asset Intake</h1><span class="armed" id="armed">Ready to scan</span><span class="sync" id="sync">Saved in this browser</span></div>
+  <div class="scanrow">
+    <div class="scanbox"><textarea id="scan" rows="1" placeholder="Scan any device label QR or barcode, or type a serial and press Enter" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Scan input"></textarea></div>
+    <button class="btn primary" id="liveBtn" type="button" hidden>Live scan</button>
+    <button class="btn" id="photoBtn" type="button">Photo of label</button>
+    <input type="file" id="photo" accept="image/*" capture="environment" multiple>
+  </div>
+  <div class="status" id="status" role="status" aria-live="polite">Ready. Scanner input goes into the box above.</div>
+</div></header>
+
+<div class="cam" id="cam" hidden>
+  <video id="camv" playsinline muted></video>
+  <div class="reticle"></div>
+  <div class="camtop"><span id="camMsg">Point at a label</span><button class="btn" id="torchBtn" type="button" hidden>Light</button><button class="btn" id="camClose" type="button">Done</button></div>
+  <div class="camlast" id="camLast"><b id="camCount">0 scanned</b><span id="camStatus">Hold the code inside the frame, about 10–20 cm away.</span></div>
+</div>
+
+<main><div class="wrap">
+  <section class="defaults" aria-label="Applied to each new scan">
+    <span class="lbl">Applied to each new scan</span>
+    <label class="f">Site / school<input id="d_site" placeholder="e.g. St Mary's Primary"></label>
+    <label class="f">Room / location<input id="d_room" placeholder="e.g. ICT Suite 2"></label>
+    <label class="f">Autopilot group tag<input id="d_tag" placeholder="e.g. SMP-Student"></label>
+    <label class="f">PO / order ref<input id="d_po" placeholder="optional"></label>
+  </section>
+
+  <section style="display:grid;gap:10px">
+    <div class="toolbar">
+      <div class="count" id="count">0<small>devices</small></div>
+      <button class="btn" id="modelBtn" type="button" hidden>Fill model names</button>
+      <button class="btn" id="copyBtn" type="button">Copy for Excel</button>
+      <button class="btn" id="csvBtn" type="button">CSV</button>
+      <button class="btn primary" id="xlsxBtn" type="button">Export .xlsx</button>
+      <button class="btn danger" id="clearBtn" type="button">Clear all</button>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr>
+          <th>#</th><th>Make</th><th>Serial / service tag</th><th>Part / MTM</th><th>Model</th><th>Built (est.)</th><th title="Years of parts / labour / on-site cover">Warranty</th><th>MAC</th>
+          <th>Asset tag</th><th>Site</th><th>Room</th><th>Group tag</th><th>Notes</th><th>Check</th><th></th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div class="empty" id="empty">
+        <h2>No devices scanned yet</h2>
+        <p>Point a USB or Bluetooth scanner at the QR or barcode on the base or box label, or take a photo of it. HP, Dell, Lenovo, Fujitsu, Apple, Samsung, Microsoft and others are recognised, and each device lands here as a row with make, serial and part number pulled out.</p>
+        <button class="btn" id="demoBtn" type="button">Add an example row</button>
+      </div>
+    </div>
+  </section>
+
+  <details class="help">
+    <summary>How scanning works</summary>
+    <ul>
+      <li><b>Hardware scanner</b> (keyboard wedge, USB or Bluetooth): the badge at the top must say <b>Ready to scan</b>. If it says paused, tap the scan box; inside the Claude app, keystrokes go to the chat box until you click the page. Scanners that end with Enter, Tab or nothing at all are all accepted. Multi-line QR payloads are captured whole, so labels that encode several fields on separate lines still land as one row.</li>
+      <li><b>Phone or webcam</b>: <b>Live scan</b> opens the camera and adds each new code it sees, with a buzz and a green frame. It appears in the downloaded page when opened over https or from the PC's own disk; Claude's viewer does not allow live camera use, so inside Claude use <b>Photo of label</b> (several photos can be picked at once).</li>
+      <li>Understood formats: vendor support URLs (HP <code>?serialnumber=</code>, Dell <code>qrl.dell.com/&lt;tag&gt;</code>, Lenovo <code>pcsupport</code>), Lenovo <code>1S&lt;MTM&gt;&lt;serial&gt;</code> codes, ANSI/ISO box labels (<code>S</code> serial, <code>1P</code> part), GS1 <code>(21)</code> serials, labelled text (<code>S/N</code>, <code>Service Tag</code>, <code>MTM</code>, <code>P/N</code>, <code>VFY:</code>, <code>IMEI</code>, <code>MAC</code>), Apple part numbers (<code>…/A</code>), Samsung model codes, and HP's comma-separated QR (<code>serial,product,model,1y1y0y</code>, where the last part is years of parts/labour/on-site warranty). Make is detected from the URL, label text or serial pattern; a lone 7-character code is taken as a Dell service tag. Raw text is kept in the export.</li>
+      <li>Duplicate serials are not added again; the existing row is highlighted instead.</li>
+      <li><b>Built (est.)</b> is filled for HP serials only, decoded from characters 4–6 (year digit + week), and is an estimate. <b>Fill model names</b> asks Claude to name the model from the make and part number; those values are marked <span class="ai">AI</span> and should be checked before they go into an asset register.</li>
+      <li>Rows save to your account when signed in, so you can scan on a phone and export on a laptop.</li>
+    </ul>
+  </details>
+</div></main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+(function(){
+const $=s=>document.querySelector(s);
+const statusEl=$('#status'), scanEl=$('#scan');
+function say(msg,kind){statusEl.textContent=msg;statusEl.className='status'+(kind?' '+kind:'');}
+
+/* ---------- parsing ---------- */
+const MAKES=[['HP',/\bHP\b|hp\.com|hewlett/i],['Dell',/dell/i],['Lenovo',/lenovo|thinkpad|thinkcentre/i],['Fujitsu',/fujitsu|\bfsc\b/i],
+  ['Apple',/apple|macbook|\bimac\b/i],['Samsung',/samsung/i],['Microsoft',/microsoft|surface/i],['Acer',/\bacer\b/i],['ASUS',/\basus\b/i],
+  ['Dynabook',/dynabook|toshiba/i],['Panasonic',/panasonic|toughbook/i],['Getac',/getac/i],['Google',/chromebook|google/i]];
+const HP_SN=/^(5C[A-Z]|CN[A-Z0-9]|CZC|MXL|2U[A-Z]|8C[A-Z]|4C[A-Z]|3C[A-Z]|1H[A-Z]|SGH|USH|TRF|MXM)[A-Z0-9]{7}$/;
+const HP_PN=/^[0-9A-Z]{4,8}#[A-Z0-9]{3}$|^[0-9][A-Z0-9]{3,6}(EA|ET|AV|UT|UA|EC|ES|AA|EW|ED|UC|AT)$/;
+const LEN_SN=/^(PF|PC|PG|PW|R9|MJ|MP|S1|YJ|YL|PV|PR)[A-Z0-9]{6}$/;
+const LEN_MTM=/^\d{2}[A-Z0-9]{6}[A-Z]{2}$/;
+const DELL_TAG=/^[A-Z0-9]{7}$/;
+const MAC_RE=/\b([0-9A-F]{2}([:-])(?:[0-9A-F]{2}\2){4}[0-9A-F]{2})\b/;
+const SER_KEYS=/^(sn|s|serial|serialnumber|serialno|ser|sernr|servicetag|svctag|st|tag|snr|ident|deviceserial)$/;
+const PRD_KEYS=/^(pn|p|product|productnumber|productno|partnumber|partno|sku|mtm|mt|machinetype|type|mpn|ref|vfy|lkn|modelnumber|modelcode)$/;
+function mixed(s){return /\d/.test(s)&&/[A-Z]/.test(s);}
+function cleanTok(s){return (s||'').trim().split(/\s+/)[0].replace(/[^A-Z0-9#\/\-:]/gi,'').replace(/^[:\-]+|[:\-]+$/g,'').toUpperCase();}
+function serialish(s){return /^[A-Z0-9]{6,22}$/.test(s)&&(mixed(s)||/^\d{10,14}$/.test(s))&&!/^[0-9A-F]{12}$/.test(s)||HP_SN.test(s);}
+
+function parse(raw){
+  const t=(raw||'').replace(/\r/g,'').trim();
+  const o={make:'',serial:'',product:'',model:'',mac:'',imei:'',warranty:''};
+  const setP=v=>{if(v&&!o.product)o.product=v;}, setS=v=>{if(v&&!o.serial)o.serial=v;};
+  for(const [n,re] of MAKES){ if(re.test(t)){o.make=n;break;} }
+
+  // ANSI MH10.8.2 / ISO 15434 box labels: [)>RS06 GS S<serial> GS 1P<part> ...
+  if(/\[\)>|\x1d|\x1e/.test(t)){
+    for(const f of t.split(/[\x1d\x1e\x04]/)){ const m=/^(\d{0,3})([A-Z])(.+)$/.exec(f.trim()); if(!m) continue;
+      const di=m[1]+m[2], v=cleanTok(m[3]);
+      if(di==='S') setS(v); else if(di==='1P'||di==='P'||di==='30P') setP(v); }
+  }
+  // GS1 human-readable element strings: (21) serial, (240) additional product id
+  t.replace(/\((21)\)\s*([A-Z0-9\-]+)/gi,(_,a,v)=>setS(v.toUpperCase()));
+  t.replace(/\((240|241)\)\s*([A-Z0-9\-#\/]+)/gi,(_,a,v)=>setP(v.toUpperCase()));
+
+  // URLs (HP, Dell qrl, Lenovo pcsupport, generic ?serial=)
+  const url=(t.match(/https?:\/\/\S+/i)||[])[0];
+  if(url){
+    const qi=url.indexOf('?'); const base=qi<0?url:url.slice(0,qi); const q=qi<0?'':url.slice(qi+1).replace(/#(?![A-Z0-9]{3}(&|$))/i,'&');
+    for(const p of q.split('&')){ const i=p.indexOf('='); if(i<1) continue;
+      let k,v; try{k=decodeURIComponent(p.slice(0,i)).toLowerCase().replace(/[^a-z]/g,''); v=decodeURIComponent(p.slice(i+1).replace(/\+/g,' '));}catch(e){continue;}
+      if(SER_KEYS.test(k)) setS(cleanTok(v)); else if(PRD_KEYS.test(k)) setP(cleanTok(v));
+      else if(/model|productname|name/.test(k)&&!o.model) o.model=v.trim();
+      else if(/mac/.test(k)&&!o.mac) o.mac=v.trim(); }
+    if(!o.serial){ const segs=base.replace(/^https?:\/\/[^/]+/i,'').split('/').filter(Boolean);
+      for(let i=0;i<segs.length;i++){ const s=segs[i].toUpperCase();
+        if(/^(servicetag|serial|sn|serialnumber)$/i.test(segs[i])&&segs[i+1]){setS(cleanTok(segs[i+1]));break;}
+        if(i===segs.length-1&&/^[A-Z0-9]{7,15}$/.test(s)&&mixed(s)) setS(s); } }
+  }
+
+  // Labelled text: "S/N: …", "Service Tag: …", "MTM: …", "P/N: …"
+  const kv=/\b(PRODUCT\s*NAME|MODEL\s*NAME|DESCRIPTION|MODEL(?:\s*(?:NO\.?|NUMBER|CODE))?|S\/N|SN|SER(?:IAL)?\.?\s*(?:NO\.?|NUMBER|NR\.?|#)?|SERVICE\s*TAG|SVC\s*TAG|IMEI\d?|P\/N|PN|PART\s*(?:NO\.?|NUMBER)|PRODUCT(?:\s*(?:NO\.?|NUMBER|#|ID))?|SKU|MTM|M\/?T(?:-?M)?|MACHINE\s*TYPE|TYPE|VFY|LKN|REF|MPN|MAC(?:\s*ADDR(?:ESS)?)?|(?:WIFI|WLAN|LAN|ETHERNET)\s*MAC)(?![A-Z])\s*[:=#]\s*([^\n;|]+)/gi;
+  let m;
+  while((m=kv.exec(t))){
+    const k=m[1].toUpperCase().replace(/[\s.]+/g,' ').trim(), v=m[2].trim();
+    if(/MAC/.test(k)&&!/MACHINE/.test(k)){ if(!o.mac) o.mac=v.split(/\s+/)[0]; }
+    else if(/^IMEI/.test(k)){ if(!o.imei) o.imei=cleanTok(v); }
+    else if(/^(PRODUCT NAME|MODEL NAME|DESCRIPTION)$/.test(k)){ if(!o.model) o.model=v.replace(/\s{2,}.*/,'').slice(0,80); }
+    else if(k==='MODEL'){ if(/\s/.test(v.trim())&&!o.model) o.model=v.slice(0,80); else setP(cleanTok(v)); }
+    else if(/^(S\/N|SN|SER|SERVICE|SVC)/.test(k)) setS(cleanTok(v));
+    else setP((k==='VFY'||k==='LKN'?k+':':'')+cleanTok(v));
+  }
+
+  if(!o.serial&&(m=/\b(?:S\/N|SERIAL(?:\s*(?:NO|NUMBER))?)\s+([A-Z0-9]{5,22})\b/i.exec(t))) setS(m[1].toUpperCase());
+  // Delimited payloads (HP: serial,product,model name,warranty code)
+  const flds=t.split(/[,\n\t;|]+/).map(x=>x.trim()).filter(Boolean);
+  for(const f of flds){
+    let w=/^(\d+)Y(\d+)Y(\d+)Y$/i.exec(f);
+    if(w&&!o.warranty){o.warranty=w[1]+'/'+w[2]+'/'+w[3];continue;}
+    if(!o.model&&flds.length>=2&&/\s/.test(f)&&!(o.serial&&f.toUpperCase().includes(o.serial))&&!/[:=]/.test(f)&&f.length<=60&&/[A-Z]/i.test(f)&&/\d/.test(f)&&!/^https?:/i.test(f)&&MAKES.some(([,re])=>re.test(f))) o.model=f;
+  }
+  // Patterns found anywhere in the text
+  const U=t.toUpperCase();
+  let x;
+  if(!o.mac&&(x=U.match(MAC_RE))) o.mac=x[1];
+  if(!o.imei&&(x=U.match(/\b(\d{15})\b/))&&/IMEI/i.test(t)) o.imei=x[1];
+  if(!o.product&&(x=U.match(/\b([MZ][A-Z0-9]{3,4}[A-Z]{0,2}\d?[A-Z]{0,2}\/A)\b/))){o.product=x[1];o.make||='Apple';}
+  if(!o.product&&(x=U.match(/\b(NP\d{3}[A-Z0-9]{2,4}-[A-Z0-9]{3,7}|SM-[A-Z]\d{3}[A-Z0-9]{0,4})\b/))){o.product=x[1];o.make||='Samsung';}
+  if(!o.product&&(x=U.match(/\b((?:VFY|LKN):[A-Z0-9\-]{5,})\b/))){o.product=x[1];o.make||='Fujitsu';}
+
+  // Bare tokens
+  const toks=U.split(/[\s,;|\\]+/).map(s=>s.replace(/^[^A-Z0-9]+|[^A-Z0-9#]+$/g,'')).filter(Boolean);
+  for(const tok0 of toks){
+    const tok=tok0.replace(/[:\-]/g,'');
+    let l=/^1S([0-9A-Z]{10})([0-9A-Z]{8})$/.exec(tok)||/^1S([0-9A-Z]{4,10}?)((?:PF|PC|PG|PW|R9|MJ|MP|S1|YJ|YL|PV|PR)[A-Z0-9]{6})$/.exec(tok);
+    if(l){setP(l[1]);setS(l[2]);o.make||='Lenovo';continue;}
+    if(/^1P/.test(tok)&&tok.length>5){setP(tok.slice(2));continue;}
+    if(!o.serial&&tok.length===11&&tok[0]==='S'&&HP_SN.test(tok.slice(1))){setS(tok.slice(1));continue;}
+    if(!o.serial&&HP_SN.test(tok)){setS(tok);o.make||='HP';continue;}
+    if(!o.serial&&LEN_SN.test(tok)){setS(tok);o.make||='Lenovo';continue;}
+    if(!o.product&&HP_PN.test(tok)&&tok!==o.serial){setP(tok);o.make||='HP';continue;}
+    if(!o.product&&LEN_MTM.test(tok)&&o.make==='Lenovo'&&tok!==o.serial){setP(tok);continue;}
+  }
+  if(!o.serial){ const c=toks.map(s=>s.replace(/[:\-]/g,'')).filter(s=>serialish(s)&&s!==o.product&&s!==o.product.replace(/[:\-\/]/g,'')&&s!==o.imei&&!/^HTTP/.test(s));
+    if(c.length) setS(c[0]); }
+  if(!o.make){
+    if(HP_SN.test(o.serial)||HP_PN.test(o.product)) o.make='HP';
+    else if(LEN_SN.test(o.serial)||LEN_MTM.test(o.product)) o.make='Lenovo';
+    else if(/^(VFY|LKN):/.test(o.product)) o.make='Fujitsu';
+    else if(/\/A$/.test(o.product)) o.make='Apple';
+    else if(/^(NP\d|SM-)/.test(o.product)) o.make='Samsung';
+  }
+  // Lone 7-character code with nothing else is a Dell service tag
+  if(!o.make&&DELL_TAG.test(o.serial)&&mixed(o.serial)&&!o.product) o.make='Dell';
+  if(!o.make&&/^\d{12}$/.test(o.serial)&&!o.product) o.make='Microsoft';
+  if(o.mac){const h=o.mac.toUpperCase().replace(/[^0-9A-F]/g,''); o.mac=h.length===12?h.match(/../g).join(':'):o.mac;}
+  return o;
+}
+function buildEst(sn,make){
+  if(make&&make!=='HP') return '';
+  if(!HP_SN.test(sn||'')) return '';
+  const m=/^[A-Z0-9]{3}(\d)(\d{2})/.exec(sn); if(!m) return '';
+  const wk=+m[2]; if(wk<1||wk>53) return '';
+  const now=new Date().getFullYear(); const y=now-((now%10-+m[1]+10)%10);
+  return y+' wk '+String(wk).padStart(2,'0');
+}
+const WARRANTY={HP:()=>'https://support.hp.com/gb-en/check-warranty',
+  Dell:s=>'https://www.dell.com/support/home/en-uk/product-support/servicetag/'+encodeURIComponent(s),
+  Lenovo:()=>'https://pcsupport.lenovo.com/gb/en/warrantylookup',
+  Apple:()=>'https://checkcoverage.apple.com/',
+  Microsoft:()=>'https://mybusinessservice.surface.com/',
+  Samsung:()=>'https://www.samsung.com/uk/support/',
+  Fujitsu:()=>'https://support.ts.fujitsu.com/'};
+
+/* ---------- store: account db when available, browser storage otherwise ---------- */
+const LS='hp-intake-v1';
+let rows=[], settings={}, db=null, col=null, setDoc=null;
+function lsLoad(){try{const j=JSON.parse(localStorage.getItem(LS)||'{}');rows=j.rows||[];settings=j.settings||{};}catch(e){}}
+function lsSave(){try{localStorage.setItem(LS,JSON.stringify({rows,settings}));}catch(e){}}
+lsLoad();
+const store={
+  add(r){ if(col){col.doc(r.id).set(r).catch(dbErr);} rows.push(r); lsSave(); render(); },
+  update(id,patch){ const r=rows.find(x=>x.id===id); if(!r) return; Object.assign(r,patch); lsSave();
+    if(col) col.doc(id).update(patch).catch(dbErr); },
+  remove(id){ rows=rows.filter(x=>x.id!==id); lsSave(); render(); if(col) col.doc(id).delete().catch(dbErr); },
+  clear(){ const ids=rows.map(r=>r.id); rows=[]; lsSave(); render(); if(col) ids.forEach(id=>col.doc(id).delete().catch(dbErr)); },
+  saveSettings(){ lsSave(); if(setDoc) setDoc.set({kind:'settings',...settings}).catch(dbErr); }
+};
+function dbErr(e){ say('Account save failed ('+(e&&e.code||'error')+'). Rows are still kept in this browser.','warn'); }
+
+(async()=>{
+  try{
+    const [d,u]=await Promise.all([window.claude?.use?.('db'),window.claude?.use?.('user')]);
+    if(!d||!u) return;
+    const uid=await u.id(); if(!uid) return;
+    db=d;
+    col=db.doc('data/users/'+uid+'/hpintake').collection('scans');
+    setDoc=db.doc('data/users/'+uid+'/hpintake');
+    $('#sync').textContent='Saved to your account';
+    const local=rows.slice();
+    let first=true;
+    setDoc.get().then(s=>{ if(s.exists){settings=Object.assign({},s.data());delete settings.kind;fillDefaults();lsSave();} else if(Object.keys(settings).length) store.saveSettings(); }).catch(()=>{});
+    col.onSnapshot(snap=>{
+      const remote=snap.docs.map(x=>({...x.data(),id:x.id}));
+      if(first){ first=false; const have=new Set(remote.map(r=>r.id));
+        local.filter(r=>!have.has(r.id)).forEach(r=>{col.doc(r.id).set(r).catch(dbErr);remote.push(r);}); }
+      rows=remote.sort((a,b)=>(a.ts||0)-(b.ts||0)); lsSave(); render();
+    },e=>{ $('#sync').textContent='Local only'; col=null; setDoc=null; });
+  }catch(e){}
+})();
+
+/* ---------- capture ---------- */
+let hitId=null;
+function ingest(raw,source){
+  raw=(raw||'').trim(); if(!raw) return;
+  const p=parse(raw);
+  if(!p.serial&&!p.product){ say('No serial or part number found in: '+raw.slice(0,60),'bad'); return; }
+  if(p.serial){ const dup=rows.find(r=>r.serial===p.serial&&(!r.make||!p.make||r.make===p.make));
+    if(dup){ hitId=dup.id; render(); say('Already scanned: '+p.serial+' (row '+(rows.indexOf(dup)+1)+')','warn'); beep(220); return; } }
+  const r={id:'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), ts:Date.now(),
+    make:p.make, serial:p.serial, product:p.product, model:p.model, modelAi:false, mac:p.mac, built:buildEst(p.serial,p.make), warranty:p.warranty||'',
+    asset:'', site:settings.site||'', room:settings.room||'', tag:settings.tag||'', po:settings.po||'', notes:p.imei?'IMEI '+p.imei:'', raw, source};
+  hitId=r.id; store.add(r);
+  const miss=[!p.make&&'make',!p.serial&&'serial',!p.product&&p.make!=='Dell'&&'part no.'].filter(Boolean);
+  say('Added '+(p.make?p.make+' ':'')+(p.serial||p.product)+(miss.length?' (missing '+miss.join(', ')+')':''),miss.length?'warn':'ok');
+  beep(miss.length?440:880);
+  scanEl.classList.remove('flash'); void scanEl.offsetWidth; scanEl.classList.add('flash');
+}
+let actx=null;
+function beep(f){try{actx=actx||new (window.AudioContext||window.webkitAudioContext)();const o=actx.createOscillator(),g=actx.createGain();o.frequency.value=f;g.gain.value=.06;o.connect(g).connect(actx.destination);o.start();o.stop(actx.currentTime+.08);}catch(e){}}
+
+// Keyboard-wedge scanners: commit on Enter/Tab, or after a fast burst of keys goes quiet (scanners with no suffix).
+let commitT=null, lastKey=0, burst=0;
+function commitSoon(ms){ clearTimeout(commitT); commitT=setTimeout(()=>{commitT=null;const v=scanEl.value;scanEl.value='';burst=0;inBurst=0;prevLen=0;ingest(v,'scanner');},ms); }
+scanEl.addEventListener('keydown',e=>{
+  const now=performance.now(), gap=now-lastKey; lastKey=now;
+  if(e.key==='Enter'||e.key==='Tab'){ e.preventDefault(); scanEl.value+='\n'; commitSoon(160); return; }
+  if(e.key.length===1){ burst=gap<45?burst+1:0; if(commitT) commitSoon(160); }
+});
+let lastIn=0, inBurst=0, prevLen=0;
+scanEl.addEventListener('input',e=>{
+  const now=performance.now(), gap=now-lastIn; lastIn=now;
+  const len=scanEl.value.length, grew=len-prevLen; prevLen=len;
+  if(e.inputType==='insertLineBreak'||e.inputType==='insertParagraph'){ commitSoon(160); return; }
+  if(grew>1&&e.inputType!=='insertFromPaste'){ commitSoon(400); return; }   // phone apps and IMEs that insert whole chunks
+  inBurst=gap<45?inBurst+1:0;
+  if(inBurst>=6||burst>=6) commitSoon(300); else if(commitT) commitSoon(160);
+});
+scanEl.addEventListener('paste',()=>commitSoon(300));
+// If a scan arrives while nothing editable has focus, send it to the scan box.
+function editable(el){return el&&(el.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));}
+document.addEventListener('keydown',e=>{
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='v'&&!editable(document.activeElement)){ scanEl.focus({preventScroll:true}); return; }
+  if(e.ctrlKey||e.metaKey||e.altKey) return;
+  if(!editable(document.activeElement)&&(e.key.length===1||e.key==='Enter')){ scanEl.focus({preventScroll:true}); }
+},true);
+document.addEventListener('paste',e=>{ if(editable(e.target)) return; const txt=(e.clipboardData&&e.clipboardData.getData('text'))||''; if(txt.trim()){ e.preventDefault(); ingest(txt,'paste'); } });
+const bar=document.querySelector('header.bar');
+function focusState(){ const on=document.hasFocus()&&document.activeElement===scanEl;
+  bar.classList.toggle('paused',!on);
+  if(!on&&!statusEl.dataset.busy) statusEl.dataset.hint='1';
+  $('#armed').textContent=on?'Ready to scan':'Scanning paused: tap the scan box'; }
+scanEl.addEventListener('focus',focusState); scanEl.addEventListener('blur',()=>setTimeout(focusState,0));
+window.addEventListener('focus',focusState); window.addEventListener('blur',focusState);
+document.addEventListener('click',e=>{ if(!editable(e.target)&&!e.target.closest('button,a,summary,label')) scanEl.focus({preventScroll:true}); });
+
+$('#photoBtn').addEventListener('click',()=>$('#photo').click());
+
+/* ---------- live camera scanning (standalone page over https or from disk; Claude's viewer blocks the camera) ---------- */
+const inClaude=!!window.claude;
+if(!inClaude&&navigator.mediaDevices&&navigator.mediaDevices.getUserMedia) $('#liveBtn').hidden=false;
+const cam=$('#cam'), camv=$('#camv');
+let stream=null, camOn=false, det=null, lastTxt='', lastAt=0, camN=0, cCan=null, cCtx=null;
+async function startCam(){
+  try{ stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}}); }
+  catch(e){ say(e&&e.name==='NotAllowedError'?'Camera access was blocked. Allow the camera for this page in the browser settings, or use Photo of label.':
+      (location.protocol==='http:'?'The camera only works over https. Use Photo of label, or open the page over https.':'No camera could be opened ('+(e&&e.name||'error')+'). Use Photo of label.'),'bad'); return; }
+  cam.hidden=false; camN=0; $('#camCount').textContent='0 scanned';
+  camv.srcObject=stream; try{await camv.play();}catch(e){}
+  det=null;
+  if('BarcodeDetector' in window){ try{ const f=await BarcodeDetector.getSupportedFormats(); det=new BarcodeDetector(f&&f.length?{formats:f}:undefined);}catch(e){det=null;} }
+  const tr=stream.getVideoTracks()[0], caps=tr.getCapabilities?tr.getCapabilities():{};
+  $('#torchBtn').hidden=!caps.torch; $('#torchBtn').classList.remove('on');
+  $('#camMsg').textContent=det?'Point at a QR or barcode':'Point at a QR code';
+  try{ wakeLock=await navigator.wakeLock?.request('screen'); }catch(e){}
+  camOn=true; camTick();
+}
+let wakeLock=null;
+function stopCam(){ camOn=false; if(stream) stream.getTracks().forEach(t=>t.stop()); stream=null; cam.hidden=true; try{wakeLock&&wakeLock.release();}catch(e){} wakeLock=null; scanEl.focus({preventScroll:true}); }
+async function grab(){
+  const w=camv.videoWidth,h=camv.videoHeight; if(!w||!h) return [];
+  if(det){ try{ const r=await det.detect(camv); return r.map(x=>({text:x.rawValue,qr:x.format==='qr_code'})); }catch(e){ det=null; } }
+  if(typeof jsQR!=='function') return [];
+  const side=Math.min(w,h)*0.8, sx=(w-side)/2, sy=(h-side)/2, out=Math.min(720,side);
+  if(!cCan){cCan=document.createElement('canvas');cCtx=cCan.getContext('2d',{willReadFrequently:true});}
+  cCan.width=cCan.height=out; cCtx.drawImage(camv,sx,sy,side,side,0,0,out,out);
+  const r=jsQR(cCtx.getImageData(0,0,out,out).data,out,out,{inversionAttempts:'attemptBoth'});
+  return r&&r.data?[{text:r.data,qr:true}]:[];
+}
+async function camTick(){
+  if(!camOn) return;
+  const codes=await grab().catch(()=>[]);
+  if(codes.length){
+    const qr=codes.filter(c=>c.qr); const txt=(qr.length?qr.map(c=>c.text):codes.map(c=>c.text)).join('\n');
+    const now=Date.now();
+    if(!(txt===lastTxt&&now-lastAt<4000)){
+      lastTxt=txt; lastAt=now; const before=rows.length;
+      ingest(txt,'camera');
+      if(rows.length>before){camN++; $('#camCount').textContent=camN+' scanned';}
+      $('#camStatus').textContent=statusEl.textContent;
+      cam.classList.add('hit'); setTimeout(()=>cam.classList.remove('hit'),350);
+      try{navigator.vibrate&&navigator.vibrate(60);}catch(e){}
+    } else lastAt=now;
+  }
+  setTimeout(camTick,det?120:180);
+}
+$('#liveBtn').addEventListener('click',startCam);
+$('#camClose').addEventListener('click',stopCam);
+$('#torchBtn').addEventListener('click',async e=>{ const b=e.currentTarget, tr=stream&&stream.getVideoTracks()[0]; if(!tr) return;
+  const on=!b.classList.contains('on'); try{ await tr.applyConstraints({advanced:[{torch:on}]}); b.classList.toggle('on',on);}catch(x){} });
+document.addEventListener('visibilitychange',()=>{ if(document.hidden&&camOn) stopCam(); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&camOn) stopCam(); });
+$('#photo').addEventListener('change',async e=>{
+  const files=[...e.target.files]; e.target.value=''; if(!files.length) return;
+  say('Reading '+files.length+' photo'+(files.length>1?'s':'')+'…');
+  let found=0;
+  for(const f of files){ const codes=await decodeImage(f).catch(()=>[]);
+    if(!codes.length){ say('No QR code found in '+f.name+'. Retake closer, flat and in focus.','bad'); continue; }
+    const qr=codes.find(c=>c.qr)||codes[0];
+    let text=qr.text;
+    if(codes.length>1){ const extra=codes.filter(c=>c!==qr).map(c=>c.text).join('\n'); text+='\n'+extra; }
+    ingest(text,'photo'); found++; }
+  if(found>1) say('Added from '+found+' photos.','ok');
+});
+async function decodeImage(file){
+  const bmp=await createImageBitmap(file).catch(async()=>{const img=new Image();img.src=URL.createObjectURL(file);await img.decode();return img;});
+  const out=[];
+  if('BarcodeDetector' in window){
+    try{const det=new BarcodeDetector();const res=await det.detect(bmp);
+      res.forEach(r=>out.push({text:r.rawValue,qr:r.format==='qr_code'}));
+      if(out.length) return out;}catch(e){}
+  }
+  if(typeof jsQR!=='function') return out;
+  const W=bmp.width,H=bmp.height;
+  for(const max of [1600,1000,2400,700]){
+    const s=Math.min(1,max/Math.max(W,H)), w=Math.round(W*s), h=Math.round(H*s);
+    const c=document.createElement('canvas');c.width=w;c.height=h;
+    const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(bmp,0,0,w,h);
+    const d=x.getImageData(0,0,w,h); const r=jsQR(d.data,w,h,{inversionAttempts:'attemptBoth'});
+    if(r&&r.data){ out.push({text:r.data,qr:true}); return out; }
+  }
+  return out;
+}
+
+/* ---------- defaults ---------- */
+const dmap={site:'#d_site',room:'#d_room',tag:'#d_tag',po:'#d_po'};
+function fillDefaults(){for(const k in dmap) $(dmap[k]).value=settings[k]||'';}
+fillDefaults();
+let setT=null;
+for(const k in dmap) $(dmap[k]).addEventListener('input',e=>{settings[k]=e.target.value;clearTimeout(setT);setT=setTimeout(store.saveSettings,500);});
+
+/* ---------- render ---------- */
+const COLS=['make','serial','product','model','built','warranty','mac','asset','site','room','tag','notes'];
+const MONO=new Set(['serial','product','mac','asset','built','warranty']);
+function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function render(){
+  const tb=$('#rows');
+  $('#count').innerHTML=rows.length+'<small>device'+(rows.length===1?'':'s')+'</small>';
+  $('#empty').hidden=rows.length>0;
+  const active=document.activeElement, selS=active&&active.selectionStart, aid=active&&active.dataset&&active.dataset.id, af=active&&active.dataset&&active.dataset.f;
+  tb.innerHTML=rows.map((r,i)=>{
+    const miss=!r.serial||!r.make||(!r.product&&r.make!=='Dell');
+    const pill=r.example?'<span class="pill ex">Example</span>':miss?'<span class="pill warn">Check</span>':'<span class="pill ok">OK</span>';
+    const cells=COLS.map(k=>{
+      if(k==='built') return '<td class="mono">'+esc(r.built)+'</td>';
+      const ai=k==='model'&&r.modelAi&&r.model?'<span class="ai" title="Suggested by Claude from the product number">AI</span>':'';
+      return '<td'+(ai?' style="white-space:nowrap"':'')+'><input id="c_'+r.id+'_'+k+'" class="'+(MONO.has(k)?'mono':'')+'" data-id="'+r.id+'" data-f="'+k+'" value="'+esc(r[k])+'" aria-label="'+k+' row '+(i+1)+'"'+(ai?' style="width:calc(100% - 26px)"':'')+'>'+ai+'</td>';
+    }).join('');
+    const wf=WARRANTY[r.make]; const wl=r.serial&&wf?'<a class="lnk" href="'+esc(wf(r.serial))+'" target="_blank" rel="noopener" data-copy="'+esc(r.serial)+'" title="Copies the serial, then opens '+esc(r.make)+' warranty check">Warranty</a>':'';
+    return '<tr class="'+(r.id===hitId?'hit':'')+'" data-row="'+r.id+'"><td class="n">'+(i+1)+'</td>'+cells+'<td>'+pill+'</td><td><div class="rowact">'+wl+'<button class="icon" type="button" data-del="'+r.id+'" aria-label="Delete row '+(i+1)+'" title="Delete row">✕</button></div></td></tr>';
+  }).join('');
+  if(aid&&af){const el=document.getElementById('c_'+aid+'_'+af); if(el){el.focus();try{el.setSelectionRange(selS,selS);}catch(e){}}}
+  if(hitId){const tr=tb.querySelector('tr.hit'); if(tr) tr.scrollIntoView({block:'nearest'});}
+  const needModel=rows.some(r=>r.product&&!r.model);
+  $('#modelBtn').hidden=!(sampleFn&&needModel);
+}
+$('#rows').addEventListener('input',e=>{
+  const el=e.target; if(!el.dataset.f) return;
+  const k=el.dataset.f, id=el.dataset.id;
+  let v=el.value; if(['serial','product'].includes(k)) {v=v.toUpperCase(); }
+  const patch={[k]:v}; if(k==='serial'||k==='make'){const r=rows.find(x=>x.id===id)||{}; patch.built=buildEst(k==='serial'?v:r.serial,k==='make'?v:r.make);} if(k==='model') patch.modelAi=false;
+  clearTimeout(el._t); el._t=setTimeout(()=>{store.update(id,patch); if(k==='serial'||k==='product'||k==='make') render();},400);
+});
+$('#rows').addEventListener('click',e=>{
+  const d=e.target.closest('[data-del]'); if(d){store.remove(d.dataset.del);say('Row deleted.');return;}
+  const c=e.target.closest('[data-copy]'); if(c){ try{navigator.clipboard.writeText(c.dataset.copy).then(()=>say('Serial '+c.dataset.copy+' copied. Paste it into the warranty check.','ok'),()=>{});}catch(x){} }
+});
+$('#demoBtn').addEventListener('click',()=>{
+  const raw='1S21CB007YUKPF4K1XYZ';
+  const p=parse(raw);
+  store.add({id:'ex'+Date.now().toString(36),ts:Date.now(),...p,modelAi:false,built:buildEst(p.serial,p.make),asset:'',site:settings.site||'',room:settings.room||'',tag:settings.tag||'',po:settings.po||'',notes:'Example row, delete before export',raw,source:'example',example:true});
+  say('Example row added. Delete it before exporting.','warn');
+});
+let armT=null;
+$('#clearBtn').addEventListener('click',e=>{
+  const b=e.currentTarget; if(!rows.length) return;
+  if(!b.classList.contains('armed')){b.classList.add('armed');b.textContent='Tap again to clear '+rows.length;armT=setTimeout(()=>{b.classList.remove('armed');b.textContent='Clear all';},3000);return;}
+  clearTimeout(armT); b.classList.remove('armed'); b.textContent='Clear all'; store.clear(); say('All rows cleared.');
+});
+
+/* ---------- export ---------- */
+const HEAD=[['make','Make'],['serial','Serial Number'],['product','Part / MTM'],['model','Model'],['built','Built (est.)'],['warranty','Warranty (parts/labour/on-site yrs)'],['mac','MAC Address'],['asset','Asset Tag'],['site','Site'],['room','Room'],['tag','Group Tag'],['po','PO / Order Ref'],['notes','Notes'],['scanned','Scanned'],['raw','Raw QR Data']];
+function table(){return rows.map(r=>{const o={};HEAD.forEach(([k,h])=>{o[h]=k==='scanned'?new Date(r.ts).toLocaleString('en-GB'):k==='model'&&r.modelAi&&r.model?r.model+' (AI)':(r[k]||'');});return o;});}
+function stamp(){const d=new Date();return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');}
+function fname(ext){const s=(settings.site||'devices').replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'');return 'Device-intake_'+s+'_'+stamp()+'.'+ext;}
+let dl=null; (async()=>{try{dl=await window.claude?.use?.('downloads');}catch(e){}})();
+async function save(filename,data){
+  if(!dl){try{const b=new Blob([data],{type:filename.endsWith('.csv')?'text/csv':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=filename;document.body.appendChild(a);a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);say('Saved '+filename,'ok');}
+    catch(e){say('Could not save the file. Use Copy for Excel instead.','bad');}return;}
+  try{await dl.save({filename,data});say('Saved '+filename,'ok');}
+  catch(e){ if(e&&e.code==='declined') say('Save cancelled.'); else say('Could not save the file ('+(e&&e.code||'error')+'). Use Copy for Excel instead.','bad'); }
+}
+function needRows(){if(!rows.length){say('Nothing to export yet.','warn');return false;}return true;}
+$('#xlsxBtn').addEventListener('click',()=>{
+  if(!needRows()) return;
+  if(typeof XLSX==='undefined'){say('Spreadsheet library did not load. Use CSV or Copy for Excel.','bad');return;}
+  const ws=XLSX.utils.json_to_sheet(table(),{header:HEAD.map(h=>h[1])});
+  ws['!cols']=HEAD.map(([k])=>({wch:{serial:14,product:14,model:28,raw:50,notes:24,mac:18,scanned:18}[k]||14}));
+  ws['!autofilter']={ref:ws['!ref']};
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Devices');
+  // Autopilot-style sheet: serial plus group tag, for reconciliation against the hash import.
+  const ap=XLSX.utils.json_to_sheet(rows.filter(r=>r.serial).map(r=>({'Device Serial Number':r.serial,'Manufacturer':r.make||'','Model':r.model||'','Group Tag':r.tag||'','Part / MTM':r.product||''})));
+  XLSX.utils.book_append_sheet(wb,ap,'Autopilot check');
+  const buf=XLSX.write(wb,{type:'array',bookType:'xlsx'});
+  save(fname('xlsx'),buf);
+});
+function csvCell(v){v=String(v??'');return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
+$('#csvBtn').addEventListener('click',()=>{
+  if(!needRows()) return;
+  const t=table(),h=HEAD.map(x=>x[1]);
+  save(fname('csv'),'﻿'+[h.map(csvCell).join(','),...t.map(o=>h.map(k=>csvCell(o[k])).join(','))].join('\r\n'));
+});
+$('#copyBtn').addEventListener('click',()=>{
+  if(!needRows()) return;
+  const t=table(),h=HEAD.map(x=>x[1]).filter(x=>x!=='Raw QR Data');
+  const txt=[h.join('\t'),...t.map(o=>h.map(k=>String(o[k]).replace(/[\t\n]/g,' ')).join('\t'))].join('\n');
+  try{navigator.clipboard.writeText(txt).then(()=>say('Copied '+rows.length+' rows. Paste into Excel.','ok'),()=>fallbackCopy(txt));}catch(e){fallbackCopy(txt);}
+});
+function fallbackCopy(txt){scanEl.value=txt;scanEl.style.height='160px';scanEl.select();say('Clipboard blocked. The rows are selected in the scan box: copy them manually, then clear the box.','warn');
+  scanEl.addEventListener('blur',function f(){scanEl.style.height='';scanEl.value='';scanEl.removeEventListener('blur',f);});}
+
+/* ---------- model names via Claude ---------- */
+let sampleFn=null;
+(async()=>{try{sampleFn=await window.claude?.use?.('sample');}catch(e){} render();})();
+$('#modelBtn').addEventListener('click',async e=>{
+  const b=e.currentTarget; const key=r=>((r.make||'Unknown')+' | '+r.product); const pns=[...new Set(rows.filter(r=>r.product&&!r.model).map(key))];
+  if(!pns.length||!sampleFn) return;
+  b.disabled=true; say('Looking up '+pns.length+' product number'+(pns.length>1?'s':'')+'…');
+  try{
+    const ans=await sampleFn.json('You identify business PCs, laptops and tablets from manufacturer part numbers: HP product numbers (e.g. 7L6Z4EA#ABU), Lenovo machine type models (e.g. 21CB007YUK, where the first 4 characters are the machine type), Fujitsu VFY/LKN codes, Apple part numbers (e.g. MK1E3B/A), Samsung model codes (e.g. NP950XED-KA1UK, SM-X200) and others. Each line below is "make | part number"; make may be Unknown. Give the marketing model name including the brand, e.g. "HP ProBook 450 G10", "Lenovo ThinkPad T14 Gen 3", "Apple MacBook Pro 14-inch (2021)". Only answer when you are confident of the exact model family and generation; otherwise use null. Never guess a generation. Return only a JSON object mapping each line exactly as given to a string or null.\n\n'+pns.join('\n'),{modelTier:'default'});
+    let n=0;
+    rows.forEach(r=>{const v=ans&&ans[key(r)]; if(r.product&&!r.model&&typeof v==='string'&&v.trim()){store.update(r.id,{model:v.trim(),modelAi:true});n++;}});
+    render(); say(n?('Filled '+n+' model name'+(n>1?'s':'')+'. Marked AI: check before use.'):'No confident matches. Enter models manually.',n?'ok':'warn');
+  }catch(err){ say(err&&err.code==='not_granted'?'Model lookup was not allowed.':'Model lookup failed. Enter models manually.','warn'); if(err&&err.code==='not_granted') sampleFn=null; }
+  b.disabled=false; render();
+});
+
+render();
+setTimeout(()=>{try{scanEl.focus({preventScroll:true});}catch(e){} focusState();},50);
+})();
+</script>
+
+</body></html>
