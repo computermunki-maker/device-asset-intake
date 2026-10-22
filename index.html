@@ -106,8 +106,8 @@ input[type=file]{display:none}
     <button class="btn" id="photoBtn" type="button">Take photo</button>
     <button class="btn" id="photosBtn" type="button" title="Pick one or many label photos from the gallery or a folder">Choose photos</button>
     <input type="file" id="photo" accept="image/*" capture="environment">
-    <input type="file" id="photos" accept="image/*" multiple>
-    <input type="file" id="listFile" accept=".csv,.txt,.xlsx,.xls,text/plain,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+    <input type="file" id="photos" accept="image/*,.jpg,.jpeg,.png,.heic,.heif,.webp" multiple>
+    <input type="file" id="listFile" multiple accept=".csv,.txt,.xlsx,.xls,text/plain,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/*,.jpg,.jpeg,.png,.heic,.webp">
   </div>
   <div class="status" id="status" role="status" aria-live="polite">Ready. Scanner input goes into the box above.</div>
 </div></header>
@@ -160,7 +160,7 @@ input[type=file]{display:none}
     <summary>How scanning works</summary>
     <ul>
       <li><b>Hardware scanner</b> (keyboard wedge, USB or Bluetooth): the badge at the top must say <b>Ready to scan</b>. If it says paused, tap the scan box; inside the Claude app, keystrokes go to the chat box until you click the page. Scanners that end with Enter, Tab or nothing at all are all accepted. Multi-line QR payloads are captured whole, so labels that encode several fields on separate lines still land as one row.</li>
-      <li><b>Several photos at once</b>: <b>Choose photos</b> picks any number from the gallery (or a folder on a laptop; you can also drag photos onto the page). Each photo is one label; photos of different labels on the same device merge into its row. <b>Take photo</b> opens the camera for a single shot.</li>
+      <li><b>Several photos at once</b>: <b>Choose photos</b> picks any number from the gallery: long-press the first photo, then tap the rest. On a laptop, Ctrl-click or Shift-click several in the file window, or drag them onto the page. <b>Import list</b> accepts photos too, mixed with .xlsx/.csv files. iPhone HEIC photos only open in Safari; set Camera &gt; Formats &gt; Most Compatible if they are not read. Each photo is one label; photos of different labels on the same device merge into its row. <b>Take photo</b> opens the camera for a single shot.</li>
       <li><b>MAC addresses</b>: a device can have any number (LAN, Wi-Fi, Bluetooth, dock). Every MAC on a label or scanned after the serial is added to that row, separated by semicolons; type extra ones the same way. The export puts each in its own column (MAC 1, MAC 2, …).</li>
       <li><b>Email list</b>: on a phone it opens the share sheet with the Excel file attached; pick your mail app. On a laptop it saves the file and opens a new email with the device list in the body, ready for you to attach the file. Set <b>Email list to</b> above to pre-fill the address.</li>
       <li><b>Phone or webcam</b>: <b>Live scan</b> opens the camera and adds each new code it sees, with a buzz and a green frame. It appears in the downloaded page when opened over https or from the PC's own disk; Claude's viewer does not allow live camera use, so inside Claude use <b>Take photo</b> or <b>Choose photos</b>.</li>
@@ -519,9 +519,15 @@ window.addEventListener('focus',focusState); window.addEventListener('blur',focu
 document.addEventListener('click',e=>{ if(!editable(e.target)&&!e.target.closest('button,a,summary,label')) scanEl.focus({preventScroll:true}); });
 
 $('#photoBtn').addEventListener('click',()=>$('#photo').click());
-$('#photosBtn').addEventListener('click',()=>$('#photos').click());
+let lastPick='';
+$('#photosBtn').addEventListener('click',()=>{ lastPick='photos'; $('#photos').click(); });
+$('#photoBtn').addEventListener('click',()=>{ lastPick='photo'; });
 $('#importBtn').addEventListener('click',()=>$('#listFile').click());
-$('#listFile').addEventListener('change',async e=>{ const f=e.target.files[0]; e.target.value=''; if(!f) return;
+$('#listFile').addEventListener('change',async e=>{ const all=[...e.target.files]; e.target.value=''; if(!all.length) return;
+  const isImg=x=>/^image\//.test(x.type)||/\.(jpe?g|png|heic|heif|webp|bmp)$/i.test(x.name);
+  const imgs=all.filter(isImg); for(const f of all.filter(x=>!isImg(x))) await importFile(f);
+  if(imgs.length) processPhotos(imgs); });
+async function importFile(f){
   try{
     let table;
     if(/\.xlsx?$/i.test(f.name)){
@@ -530,7 +536,7 @@ $('#listFile').addEventListener('change',async e=>{ const f=e.target.files[0]; e
       table=XLSX.utils.sheet_to_json(sh,{header:1,defval:'',raw:false});
     } else table=parseCSV(await f.text());
     importTable(table,f.name);
-  }catch(x){ say('Could not read '+f.name+': '+(x&&x.message||x),'bad'); } });
+  }catch(x){ say('Could not read '+f.name+': '+(x&&x.message||x),'bad'); } }
 // RFC 4180 CSV: quoted fields may contain commas and line breaks
 function parseCSV(t){ t=t.replace(/^﻿/,''); const out=[]; let row=[], f='', q=false;
   for(let i=0;i<t.length;i++){ const c=t[i];
@@ -636,10 +642,10 @@ async function processPhotos(files){
     for(let i=0;i<files.length;i++){ const f=files[i];
       say('Reading photo '+(i+1)+' of '+files.length+'…'); await new Promise(r=>setTimeout(r,20));
       const codes=await decodeImage(f).catch(()=>[]);
-      if(!codes.length){ missed.push(f.name); c.none++; continue; }
+      if(!codes.length){ missed.push(f.name+(/\.hei[cf]$/i.test(f.name)||/hei[cf]/i.test(f.type)?' (HEIC: this browser cannot open it)':'')); c.none++; continue; }
       c[ingest(labelText(codes),'photo')||'none']++; }
   } finally { photoBusy=false; }
-  if(files.length===1&&!missed.length) return;
+  if(files.length===1&&!missed.length){ if(lastPick==='photos') setTimeout(()=>say(statusEl.textContent+' Only one photo came through. To pick several, long-press the first photo, then tap the others.',statusEl.className.replace('status','').trim()),0); return; }
   if(files.length===1){ say('No code found in '+missed[0]+'. Retake closer, square-on and in focus, with the flash off.','bad'); return; }
   say(files.length+' photos: '+c.added+' added, '+c.updated+' updated, '+c.dup+' already in the list'+(c.none?', '+c.none+' with nothing usable'+(missed.length?' (no code found: '+missed.slice(0,4).join(', ')+(missed.length>4?'…':'')+')':''):''),c.none?'warn':'ok');
 }
@@ -648,7 +654,7 @@ $('#photos').addEventListener('change',e=>{ const f=[...e.target.files]; e.targe
 // Drop photos or an exported list anywhere on the page
 document.addEventListener('dragover',e=>{ if([...(e.dataTransfer?.types||[])].includes('Files')) e.preventDefault(); });
 document.addEventListener('drop',async e=>{ const fs=[...(e.dataTransfer?.files||[])]; if(!fs.length) return; e.preventDefault();
-  const lists=fs.filter(f=>/\.(csv|txt|xlsx?)$/i.test(f.name)); for(const f of lists){ const dt=new DataTransfer(); dt.items.add(f); const inp=$('#listFile'); inp.files=dt.files; inp.dispatchEvent(new Event('change')); }
+  const lists=fs.filter(f=>/\.(csv|txt|xlsx?)$/i.test(f.name)); for(const f of lists) await importFile(f);
   processPhotos(fs.filter(f=>!lists.includes(f))); });
 async function decodeImage(file){
   const bmp=await createImageBitmap(file).catch(async()=>{const img=new Image();img.src=URL.createObjectURL(file);await img.decode();return img;});
