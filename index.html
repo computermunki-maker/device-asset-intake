@@ -305,7 +305,7 @@ function buildEst(sn,make){
 }
 const WARRANTY={HP:()=>'https://support.hp.com/gb-en/check-warranty',
   Dell:s=>'https://www.dell.com/support/home/en-uk/product-support/servicetag/'+encodeURIComponent(s),
-  Lenovo:()=>'https://pcsupport.lenovo.com/gb/en/warrantylookup',
+  Lenovo:s=>'https://pcsupport.lenovo.com/gb/en/products/'+encodeURIComponent(s)+'/warranty',
   Apple:()=>'https://checkcoverage.apple.com/',
   Microsoft:()=>'https://mybusinessservice.surface.com/',
   Samsung:()=>'https://www.samsung.com/uk/support/',
@@ -656,7 +656,7 @@ function render(){
       const ai=k==='model'&&r.modelAi&&r.model?'<span class="ai" title="Suggested by Claude from the product number">AI</span>':'';
       return '<td'+(ai?' style="white-space:nowrap"':'')+'><input id="c_'+r.id+'_'+k+'" class="'+(MONO.has(k)?'mono':'')+'" data-id="'+r.id+'" data-f="'+k+'" value="'+esc(r[k])+'" aria-label="'+k+' row '+(i+1)+'"'+(ai?' style="width:calc(100% - 26px)"':'')+'>'+ai+'</td>';
     }).join('');
-    const wf=WARRANTY[r.make]; const wl=r.serial&&wf?'<a class="lnk" href="'+esc(wf(r.serial))+'" target="_blank" rel="noopener" data-copy="'+esc(r.serial)+'" title="Copies the serial, then opens '+esc(r.make)+' warranty check">Warranty</a>':'';
+    const wf=WARRANTY[r.make]; const wl=r.serial&&wf?'<a class="lnk" href="'+esc(wf(r.serial))+'" target="_blank" rel="noopener" data-copy="'+esc(r.serial)+'" data-make="'+esc(r.make)+'" title="'+(r.make==='Dell'||r.make==='Lenovo'?'Opens '+esc(r.make)+' warranty for this serial':'Copies the serial, then opens '+esc(r.make)+' warranty check')+'">Warranty</a>':'';
     return '<tr class="'+(r.id===hitId?'hit':'')+'" data-row="'+r.id+'"><td class="n">'+(i+1)+'</td>'+cells+'<td>'+pill+'</td><td><div class="rowact">'+wl+'<button class="icon" type="button" data-del="'+r.id+'" aria-label="Delete row '+(i+1)+'" title="Delete row">✕</button></div></td></tr>';
   }).join('');
   if(aid&&af){const el=document.getElementById('c_'+aid+'_'+af); if(el){el.focus();try{el.setSelectionRange(selS,selS);}catch(e){}}}
@@ -673,7 +673,11 @@ $('#rows').addEventListener('input',e=>{
 });
 $('#rows').addEventListener('click',e=>{
   const d=e.target.closest('[data-del]'); if(d){store.remove(d.dataset.del);say('Row deleted.');return;}
-  const c=e.target.closest('[data-copy]'); if(c){ try{navigator.clipboard.writeText(c.dataset.copy).then(()=>say('Serial '+c.dataset.copy+' copied. Paste it into the warranty check.','ok'),()=>{});}catch(x){} }
+  const c=e.target.closest('[data-copy]'); if(c){ const sn=c.dataset.copy, mk=c.dataset.make;
+    if(mk==='Dell'||mk==='Lenovo'){ say('Opened '+mk+' warranty for '+sn+'.','ok'); return; }
+    const manual='Serial '+sn+' copied: click the serial box on the '+mk+' page and press Ctrl+V (or long-press > Paste on a phone). '+mk+' does not accept the serial in the link.';
+    const fail=()=>say('Type this serial into the '+mk+' page: '+sn+' ('+mk+' does not accept the serial in the link).','warn');
+    try{ navigator.clipboard.writeText(sn).then(()=>say(manual,'ok'),fail); }catch(x){ fail(); } }
 });
 $('#demoBtn').addEventListener('click',()=>{
   const raw='1S21CB007YUKPF4K1XYZ';
