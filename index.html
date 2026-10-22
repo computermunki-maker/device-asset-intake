@@ -58,7 +58,7 @@ label.f input{font:15px var(--f-body);padding:9px 10px;border:1px solid var(--li
 .toolbar .count{margin-right:auto;font-family:var(--f-display);font-size:22px;font-weight:600}
 .count small{font-family:var(--f-body);font-size:13px;color:var(--muted);font-weight:400;margin-left:6px}
 .tablewrap{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:8px}
-table{border-collapse:collapse;width:100%;min-width:1140px;font-size:14px}
+table{border-collapse:collapse;width:100%;min-width:1260px;font-size:14px}
 th{font:600 11px var(--f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--panel);position:sticky;top:0}
 td{padding:4px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
 tr:last-child td{border-bottom:0}
@@ -138,7 +138,7 @@ input[type=file]{display:none}
     <div class="tablewrap">
       <table>
         <thead><tr>
-          <th>#</th><th>Make</th><th>Serial / service tag</th><th>Part / MTM</th><th>Model</th><th>Built (est.)</th><th title="Years of parts / labour / on-site cover">Warranty</th><th>MAC</th>
+          <th>#</th><th>Make</th><th>Serial / service tag</th><th>Part / MTM</th><th>Model</th><th>Built (est.)</th><th title="Years of parts / labour / on-site cover">Warranty</th><th title="From the vendor's warranty page: copy it and paste it here">Warranty end</th><th>MAC</th>
           <th>Asset tag</th><th>Site</th><th>Room</th><th>Group tag</th><th>Notes</th><th>Check</th><th></th>
         </tr></thead>
         <tbody id="rows"></tbody>
@@ -161,6 +161,7 @@ input[type=file]{display:none}
       <li><b>Etched codes</b> (laser-marked Data Matrix or QR on metal or dark plastic): a photo gets a slower second attempt with contrast boosted, which often works for etched QR codes. Etched Data Matrix codes on brushed metal are rarely readable from a photo; use a USB or Bluetooth 2D scanner for those.</li>
       <li><b>Labels with several barcodes</b> (S/N, P/N, MAC): a photo reads them all at once. Scanned one by one, start each device with its <b>serial</b>; the P/N, MAC and locale barcodes that follow join that row for two minutes. Other barcodes on labels and boxes (tracking, Box ID, SO, PO, shipment, UPC) are ignored, and HP spare/SSA numbers go to Notes. Scanning another label for a device already in the list fills its empty fields. The retail UPC/EAN box barcode is ignored because it does not identify the device. Make is detected from the URL, label text or serial pattern; a lone 7-character code is taken as a Dell service tag. Raw text is kept in the export.</li>
       <li>Duplicate serials are not added again; the existing row is highlighted instead.</li>
+      <li><b>Warranty dates</b>: click a row's <b>Warranty</b> link, look the device up, then on the vendor's result page press Ctrl+A and Ctrl+C and paste anywhere on this page. Warranty end (with Active/Expired), start, cover type and, if empty, the model are filled for the row whose serial appears in the pasted text. The vendor page cannot be read automatically, so check the dates it picked.</li>
       <li><b>Built (est.)</b> is filled for HP serials only, decoded from characters 4–6 (year digit + week), and is an estimate. <b>Fill model names</b> asks Claude to name the model from the make and part number; those values are marked <span class="ai">AI</span> and should be checked before they go into an asset register.</li>
       <li>Rows save to your account when signed in, so you can scan on a phone and export on a laptop.</li>
     </ul>
@@ -390,7 +391,43 @@ function ingest(raw,source){
   return 'added';
 }
 // Text from a scanner, a paste or an exported scan list: one line per device when every line carries its own serial.
+// Text copied from a vendor warranty result page: fill warranty end/start, cover type and model for the matching row
+let lastWarranty=null;
+const MONTHS={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+function findDates(t){ const out=[]; const add=(y,m,d,i)=>{ y=+y; m=+m; d=+d; if(y<100) y+=2000; if(y>1990&&y<2100&&m>=1&&m<=12&&d>=1&&d<=31) out.push({iso:y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0'),i}); };
+  let m; const re=[
+    [/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/g,(x,i)=>add(x[1],x[2],x[3],i)],
+    [/\b(\d{1,2})[\/.](\d{1,2})[\/.](\d{4})\b/g,(x,i)=>add(x[3],x[2],x[1],i)],
+    [/\b(\d{1,2})(?:st|nd|rd|th)?[\s-]+([A-Za-z]{3})[a-z]*[\s,-]+(\d{4})\b/g,(x,i)=>MONTHS[x[2].toLowerCase()]&&add(x[3],MONTHS[x[2].toLowerCase()],x[1],i)],
+    [/\b([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})\b/g,(x,i)=>MONTHS[x[1].toLowerCase()]&&add(x[3],MONTHS[x[1].toLowerCase()],x[2],i)]];
+  for(const [r,f] of re){ r.lastIndex=0; while((m=r.exec(t))) f(m,m.index); }
+  return out.sort((a,b)=>a.i-b.i); }
+function warrantyFromText(t){
+  if(t.length<30||!/warrant|coverage|entitlement|service end/i.test(t)) return null;
+  const ds=findDates(t); if(!ds.length) return null;
+  const near=(re)=>{ let best=null; for(const d of ds){ const before=t.slice(Math.max(0,d.i-60),d.i); const k=before.search(re); if(k>=0&&(!best||before.length-k<best.dist)) best={iso:d.iso,dist:before.length-k}; } return best&&best.iso; };
+  let end=near(/(end|expir|until|valid (to|through)|coverage to|thru)/i), start=near(/(start|begin|purchase|ship)/i);
+  if(!end){ const fut=ds.map(d=>d.iso).sort(); end=fut[fut.length-1]; }
+  const typ=(t.match(/\b(on-?site|next business day|pick-?up and return|return to (base|depot)|carry-?in|depot|premier|care pack|base warranty|limited warranty|ProSupport(?: Plus)?|Basic Hardware Service|Premier Support)\b/i)||[])[1]||'';
+  const status=end<new Date().toISOString().slice(0,10)?'Expired':'Active';
+  const ml=t.split(/\r?\n/).map(l=>l.trim()).find(l=>l.length<70&&/^(HP|Lenovo|Dell|Fujitsu|Apple|Samsung|Microsoft|Acer|ASUS|ThinkPad|ThinkCentre|Latitude|OptiPlex|Precision|Surface|MacBook|iMac|Elite|Pro|ProBook|EliteBook)\b.*\d/i.test(l)&&!/warrant/i.test(l));
+  return {end,start,type:typ,status,model:ml||''};
+}
+function applyWarrantyPaste(t){
+  const w=warrantyFromText(t); if(!w) return false;
+  const U=t.toUpperCase();
+  let r=rows.filter(x=>x.serial&&U.includes(x.serial)).sort((a,b)=>b.serial.length-a.serial.length)[0];
+  if(!r&&lastWarranty&&Date.now()-lastWarranty.at<15*60000) r=rows.find(x=>x.serial===lastWarranty.serial);
+  if(!r){ say('That looks like a warranty page, but none of its text matches a serial in the list. Paste it after clicking that row\'s Warranty link.','warn'); return true; }
+  const patch={wend:w.end+(w.status?' ('+w.status+')':'')}; const got=['warranty end '+w.end];
+  if(w.start){ patch.wstart=w.start; got.push('start '+w.start); }
+  if(w.type){ patch.wtype=w.type; got.push(w.type); }
+  if(w.model&&!r.model){ patch.model=w.model; patch.modelAi=false; got.push('model'); }
+  store.update(r.id,patch); hitId=r.id; render();
+  say('Row '+(rows.indexOf(r)+1)+' ('+r.serial+'): '+got.join(', ')+'. Check it against the vendor page.','ok'); beep(660); return true;
+}
 function ingestMany(text,source){
+  if(applyWarrantyPaste(text||'')) return;
   const lines=(text||'').split(/\r?\n/).map(l=>l.trim()).filter(l=>l&&/\d/.test(l));
   if(lines.length>=2){
     const ps=lines.map(parse), withSn=ps.filter(p=>p.serial), uniq=new Set(withSn.map(p=>p.serial));
@@ -716,8 +753,8 @@ let setT=null;
 for(const k in dmap) $(dmap[k]).addEventListener('input',e=>{settings[k]=e.target.value;clearTimeout(setT);setT=setTimeout(store.saveSettings,500);});
 
 /* ---------- render ---------- */
-const COLS=['make','serial','product','model','built','warranty','mac','asset','site','room','tag','notes'];
-const MONO=new Set(['serial','product','mac','asset','built','warranty']);
+const COLS=['make','serial','product','model','built','warranty','wend','mac','asset','site','room','tag','notes'];
+const MONO=new Set(['serial','product','mac','asset','built','warranty','wend']);
 function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function render(){
   const tb=$('#rows');
@@ -749,9 +786,9 @@ $('#rows').addEventListener('input',e=>{
 });
 $('#rows').addEventListener('click',e=>{
   const d=e.target.closest('[data-del]'); if(d){store.remove(d.dataset.del);say('Row deleted.');return;}
-  const c=e.target.closest('[data-copy]'); if(c){ const sn=c.dataset.copy, mk=c.dataset.make;
-    if(mk==='Dell'||mk==='Lenovo'){ say('Opened '+mk+' warranty for '+sn+'.','ok'); return; }
-    const manual='Serial '+sn+' copied: click the serial box on the '+mk+' page and press Ctrl+V (or long-press > Paste on a phone). '+mk+' does not accept the serial in the link.';
+  const c=e.target.closest('[data-copy]'); if(c){ const sn=c.dataset.copy, mk=c.dataset.make; lastWarranty={serial:sn,at:Date.now()};
+    if(mk==='Dell'||mk==='Lenovo'){ say('Opened '+mk+' warranty for '+sn+'. When it shows, press Ctrl+A, Ctrl+C on that page, then paste here to fill the warranty dates.','ok'); return; }
+    const manual='Serial '+sn+' copied: paste it into the '+mk+' page (Ctrl+V). When the result shows, press Ctrl+A, Ctrl+C there, then paste here to fill the warranty dates.';
     const fail=()=>say('Type this serial into the '+mk+' page: '+sn+' ('+mk+' does not accept the serial in the link).','warn');
     try{ navigator.clipboard.writeText(sn).then(()=>say(manual,'ok'),fail); }catch(x){ fail(); } }
 });
@@ -769,7 +806,7 @@ $('#clearBtn').addEventListener('click',e=>{
 });
 
 /* ---------- export ---------- */
-const HEAD=[['make','Make'],['serial','Serial Number'],['product','Part / MTM'],['model','Model'],['built','Built (est.)'],['warranty','Warranty (parts/labour/on-site yrs)'],['mac','MAC Address'],['asset','Asset Tag'],['site','Site'],['room','Room'],['tag','Group Tag'],['po','PO / Order Ref'],['notes','Notes'],['scanned','Scanned'],['raw','Raw QR Data']];
+const HEAD=[['make','Make'],['serial','Serial Number'],['product','Part / MTM'],['model','Model'],['built','Built (est.)'],['warranty','Warranty (parts/labour/on-site yrs)'],['wend','Warranty End'],['wstart','Warranty Start'],['wtype','Warranty Type'],['mac','MAC Address'],['asset','Asset Tag'],['site','Site'],['room','Room'],['tag','Group Tag'],['po','PO / Order Ref'],['notes','Notes'],['scanned','Scanned'],['raw','Raw QR Data']];
 function table(){return rows.map(r=>{const o={};HEAD.forEach(([k,h])=>{o[h]=k==='scanned'?new Date(r.ts).toLocaleString('en-GB'):k==='model'&&r.modelAi&&r.model?r.model+' (AI)':(r[k]||'');});return o;});}
 function stamp(){const d=new Date();return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');}
 function fname(ext){const s=(settings.site||'devices').replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'');return 'Device-intake_'+s+'_'+stamp()+'.'+ext;}
