@@ -67,6 +67,21 @@ td.mono,td input.mono{font-family:var(--f-mono);font-variant-numeric:tabular-num
 td input{font:14px var(--f-body);border:1px solid transparent;background:transparent;color:var(--ink);padding:6px;border-radius:4px;width:100%;min-width:90px}
 td input:hover{border-color:var(--line)} td input:focus{border-color:var(--accent);background:var(--bg);outline:none}
 td input[data-f=mac]{min-width:170px}
+td input[data-f=product]{min-width:125px} td input[data-f=serial]{min-width:115px} td input[data-f=built]{min-width:90px}
+.review{background:var(--panel);border:2px solid var(--warn);border-radius:8px;padding:12px;display:grid;gap:10px}
+.rvhead{display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap}
+.rvhead b{font-family:var(--f-display);font-size:20px;text-transform:uppercase;letter-spacing:.02em}
+.rvhead span{color:var(--muted);font-size:13px}
+.rvbody{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:14px}
+@media (max-width:720px){.rvbody{grid-template-columns:1fr}}
+.rvimg{margin:0;min-width:0}
+.rvimg img{width:100%;max-height:60vh;object-fit:contain;background:#000;border-radius:6px;cursor:zoom-in;display:block}
+.rvimg img.zoom{max-height:none;cursor:zoom-out}
+.rvimg figcaption{font-size:12px;color:var(--muted);margin-top:4px;overflow-wrap:anywhere}
+.rvform{display:grid;gap:10px;align-content:start;min-width:0}
+.rvform p{margin:0;color:var(--muted);font-size:13px}
+.rvform input{font:15px var(--f-mono);padding:9px 10px;border:1px solid var(--line);border-radius:5px;background:var(--bg);color:var(--ink);width:100%}
+.rvbtns{display:flex;gap:8px;flex-wrap:wrap}
 td.n{color:var(--muted);font-family:var(--f-mono);font-size:12px;width:36px}
 .pill{display:inline-block;font:600 11px var(--f-body);letter-spacing:.04em;padding:3px 8px;border-radius:99px;background:var(--chip);color:var(--muted);white-space:nowrap}
 .pill.ok{color:var(--ok)} .pill.warn{color:var(--warn)} .pill.ex{color:var(--accent)}
@@ -131,6 +146,21 @@ input[type=file]{display:none}
     <label class="f">Email list to<input id="d_email" type="email" placeholder="e.g. orders@dataspire.co.uk" autocomplete="email"></label>
   </section>
 
+  <section class="review" id="review" hidden aria-label="Photos to finish">
+    <div class="rvhead"><b id="rvTitle">Finish this device</b><span id="rvCount"></span></div>
+    <div class="rvbody">
+      <figure class="rvimg"><img id="rvImg" alt="Label photo"><figcaption id="rvName"></figcaption></figure>
+      <div class="rvform">
+        <p id="rvHint">The barcodes could not be read (tape or glare). Type what the label says.</p>
+        <label class="f">Serial number<input id="rv_serial" autocapitalize="characters" spellcheck="false"></label>
+        <label class="f">Part / product no.<input id="rv_product" autocapitalize="characters" spellcheck="false"></label>
+        <label class="f">Model<input id="rv_model"></label>
+        <label class="f">MAC addresses<input id="rv_mac" autocapitalize="characters" spellcheck="false" placeholder="separate with ;"></label>
+        <div class="rvbtns"><button class="btn primary" id="rvAdd" type="button">Add device</button><button class="btn" id="rvSkip" type="button">Skip photo</button></div>
+      </div>
+    </div>
+  </section>
+
   <section style="display:grid;gap:10px">
     <div class="toolbar">
       <div class="count" id="count">0<small>devices</small></div>
@@ -162,6 +192,7 @@ input[type=file]{display:none}
     <summary>How scanning works</summary>
     <ul>
       <li><b>Hardware scanner</b> (keyboard wedge, USB or Bluetooth): the badge at the top must say <b>Ready to scan</b>. If it says paused, tap the scan box; inside the Claude app, keystrokes go to the chat box until you click the page. Scanners that end with Enter, Tab or nothing at all are all accepted. Multi-line QR payloads are captured whole, so labels that encode several fields on separate lines still land as one row.</li>
+      <li><b>Labels under tape</b>: when a photo's barcodes are hidden by tape or glare, the online page in Claude asks Claude to read the printed text (those rows are noted "Read by Claude from photo: check"). Anything still unread, and every such photo on the GitHub page, opens in <b>Finish this device</b> with the photo beside the fields so you can type the serial and part number from it.</li>
       <li><b>Several photos at once</b>: <b>Choose photos</b> picks any number from the gallery: long-press the first photo, then tap the rest. On a laptop, Ctrl-click or Shift-click several in the file window, or drag them onto the page. <b>Import list</b> accepts photos too, mixed with .xlsx/.csv files. Photos on a phone plugged into a PC by USB can only be picked one at a time (Windows treats the phone as a media device): copy them into a folder on the PC first, then use <b>Choose folder</b>, or open this page on the phone itself. iPhone HEIC photos only open in Safari; set Camera &gt; Formats &gt; Most Compatible if they are not read. Each photo is one label; photos of different labels on the same device merge into its row. <b>Take photo</b> opens the camera for a single shot.</li>
       <li><b>MAC addresses</b>: a device can have any number (LAN, Wi-Fi, Bluetooth, dock). Every MAC on a label or scanned after the serial is added to that row, separated by semicolons; type extra ones the same way. The export puts each in its own column (MAC 1, MAC 2, …).</li>
       <li><b>Email list</b>: on a phone it opens the share sheet with the Excel file attached; pick your mail app. On a laptop it saves the file and opens a new email with the device list in the body, ready for you to attach the file. Set <b>Email list to</b> above to pre-fill the address.</li>
@@ -648,14 +679,56 @@ async function processPhotos(files){
   try{
     for(let i=0;i<files.length;i++){ const f=files[i];
       say('Reading photo '+(i+1)+' of '+files.length+'…'); await new Promise(r=>setTimeout(r,20));
+      const heic=/\.hei[cf]$/i.test(f.name)||/hei[cf]/i.test(f.type);
       const codes=await decodeImage(f).catch(()=>[]);
-      if(!codes.length){ missed.push(f.name+(/\.hei[cf]$/i.test(f.name)||/hei[cf]/i.test(f.type)?' (HEIC: this browser cannot open it)':'')); c.none++; continue; }
-      c[ingest(labelText(codes),'photo')||'none']++; }
+      const txt=codes.length?labelText(codes):'', pp=txt?parse(txt):null;
+      if(pp&&pp.serial){ c[ingest(txt,'photo')||'none']++; continue; }
+      if(pp&&(pp.product||pp.mac)){ const st=ingest(txt,'photo'); if(st==='updated'||st==='dup'){ c[st]++; continue; } }
+      if(heic){ missed.push(f.name+' (HEIC: this browser cannot open it)'); c.none++; continue; }
+      // Barcodes hidden by tape or glare: let Claude read the printed text, or ask the user to type it
+      const ai=await readLabelWithClaude(f,i+1,files.length).catch(()=>null);
+      if(ai&&ai.serial){ const st=ingest(aiText(ai,txt),'photo-ai'); c[st||'none']++; const r=rows.find(x=>x.id===hitId); if(r&&st==='added') store.update(r.id,{notes:[r.notes,'Read by Claude from photo: check'].filter(Boolean).join('; ')}); continue; }
+      queueReview(f,pp||{},ai); c.review=(c.review||0)+1; }
   } finally { photoBusy=false; }
+  if(files.length===1&&c.review) return;
   if(files.length===1&&!missed.length){ if(lastPick==='photos') setTimeout(()=>say(statusEl.textContent+' Only one photo came through. To pick several, long-press the first photo, then tap the others.',statusEl.className.replace('status','').trim()),0); return; }
   if(files.length===1){ say('No code found in '+missed[0]+'. Retake closer, square-on and in focus, with the flash off.','bad'); return; }
+  if(c.review) setTimeout(()=>say(statusEl.textContent+' '+c.review+' photo'+(c.review>1?'s need':' needs')+' typing in: see Finish this device.','warn'),0);
   say(files.length+' photos: '+c.added+' added, '+c.updated+' updated, '+c.dup+' already in the list'+(c.none?', '+c.none+' with nothing usable'+(missed.length?' (no code found: '+missed.slice(0,4).join(', ')+(missed.length>4?'…':'')+')':''):''),c.none?'warn':'ok');
 }
+// ---- Claude reads the label text (online page only) ----
+async function readLabelWithClaude(file,i,n){
+  if(!sampleFn) return null;
+  const lim=await sampleFn.limits().catch(()=>null); if(!lim||!lim.images) return null;
+  say('Barcodes hidden on photo '+i+' of '+n+'. Asking Claude to read the label text…');
+  const bmp=await createImageBitmap(file); const sc=Math.min(1,1600/Math.max(bmp.width,bmp.height));
+  const cv=document.createElement('canvas'); cv.width=Math.round(bmp.width*sc); cv.height=Math.round(bmp.height*sc); cv.getContext('2d').drawImage(bmp,0,0,cv.width,cv.height);
+  const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',0.88));
+  const ans=await sampleFn.json('The image is a photo of a label on a computer, monitor or other IT device, or on its box. Parts may be covered by tape or glare. Read the PRINTED TEXT (not barcodes). Return only JSON: {"make":string|null,"model":string|null,"serial":string|null,"part_number":string|null,"mac_addresses":string[]}. serial = the device serial number (labelled S/N, Serial No, SN or Service Tag). part_number = the product number / SKU (HP "Product No." or "P/N" such as 9U5J5UT#ABU, Lenovo MTM, Apple part no.). Do not use UPC/EAN, box ID, SO, PO, ship ID, tracking, RMN, spare or SSA numbers. Copy characters exactly; if any character of a value is hidden or unclear, return null for that value rather than guessing.',{images:[blob],modelTier:'default'});
+  return ans&&typeof ans==='object'?ans:null;
+}
+function aiText(a,extra){ return [a.serial&&'S/N: '+a.serial, a.part_number&&'P/N: '+a.part_number, a.model&&'Product Name: '+(a.make&&!String(a.model).toLowerCase().startsWith(String(a.make).toLowerCase())?a.make+' ':'')+a.model, ...(a.mac_addresses||[]).map(m=>'MAC: '+m), a.make&&'Make: '+a.make].filter(Boolean).join('\n'); }
+// ---- Finish-this-device panel for photos nobody could read ----
+const reviewQ=[];
+function queueReview(file,p,ai){ reviewQ.push({file,url:URL.createObjectURL(file),p,ai}); showReview(); }
+function showReview(){
+  const it=reviewQ[0]; $('#review').hidden=!it; if(!it) return;
+  $('#rvImg').src=it.url; $('#rvImg').classList.remove('zoom'); $('#rvName').textContent=it.file.name;
+  $('#rvCount').textContent=reviewQ.length>1?reviewQ.length+' photos waiting':'';
+  const a=it.ai||{}, p=it.p||{};
+  $('#rv_serial').value=p.serial||a.serial||''; $('#rv_product').value=p.product||a.part_number||''; $('#rv_model').value=p.model||a.model||''; $('#rv_mac').value=joinMacs([p.mac||'',...(a.mac_addresses||[])]);
+  $('#rvHint').textContent=it.ai?'Claude could not read every value with confidence. Check the photo and fill the gaps.':'The barcodes could not be read (tape or glare). Type what the label says; tap the photo to zoom.';
+  setTimeout(()=>{ const first=['#rv_serial','#rv_product'].find(id=>!$(id).value)||'#rv_serial'; $(first).focus(); },50);
+}
+function nextReview(){ const it=reviewQ.shift(); if(it) URL.revokeObjectURL(it.url); showReview(); if(!reviewQ.length) scanEl.focus({preventScroll:true}); }
+$('#rvImg').addEventListener('click',e=>e.currentTarget.classList.toggle('zoom'));
+$('#rvSkip').addEventListener('click',()=>{ say('Skipped '+(reviewQ[0]?.file.name||'photo')+'.'); nextReview(); });
+$('#rvAdd').addEventListener('click',()=>{
+  const sn=$('#rv_serial').value.trim().toUpperCase(), pn=$('#rv_product').value.trim().toUpperCase(), md=$('#rv_model').value.trim(), mc=$('#rv_mac').value;
+  if(!sn&&!pn){ say('Enter at least the serial or the part number.','warn'); $('#rv_serial').focus(); return; }
+  const lines=[sn&&'S/N: '+sn, pn&&'P/N: '+pn, md&&'Product Name: '+md, ...macList(mc).map(m=>'MAC: '+m)].filter(Boolean).join('\n');
+  const st=ingest(lines,'photo-typed'); if(st==='none') return; nextReview(); });
+['#rv_serial','#rv_product','#rv_model','#rv_mac'].forEach(id=>$(id).addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); $('#rvAdd').click(); } }));
 $('#photo').addEventListener('change',e=>{ const f=[...e.target.files]; e.target.value=''; processPhotos(f); });
 $('#photos').addEventListener('change',e=>{ const f=[...e.target.files]; e.target.value=''; processPhotos(f); });
 // Drop photos or an exported list anywhere on the page
@@ -805,7 +878,7 @@ function render(){
     const miss=!r.serial||r.snWeak||!r.make||(!r.product&&r.make!=='Dell');
     const pill=r.example?'<span class="pill ex">Example</span>':miss?'<span class="pill warn">Check</span>':'<span class="pill ok">OK</span>';
     const cells=COLS.map(k=>{
-      if(k==='built') return '<td class="mono">'+esc(r.built)+'</td>';
+      if(k==='built') return '<td class="mono" style="white-space:nowrap">'+esc(r.built)+'</td>';
       const ai=k==='model'&&r.modelAi&&r.model?'<span class="ai" title="Suggested by Claude from the product number">AI</span>':'';
       return '<td'+(ai?' style="white-space:nowrap"':'')+'><input id="c_'+r.id+'_'+k+'" class="'+(MONO.has(k)?'mono':'')+'" data-id="'+r.id+'" data-f="'+k+'" value="'+esc(r[k])+'" aria-label="'+k+' row '+(i+1)+'"'+(ai?' style="width:calc(100% - 26px)"':'')+'>'+ai+'</td>';
     }).join('');
