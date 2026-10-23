@@ -58,7 +58,7 @@ label.f input{font:15px var(--f-body);padding:9px 10px;border:1px solid var(--li
 .toolbar .count{margin-right:auto;font-family:var(--f-display);font-size:22px;font-weight:600}
 .count small{font-family:var(--f-body);font-size:13px;color:var(--muted);font-weight:400;margin-left:6px}
 .tablewrap{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:8px}
-table{border-collapse:collapse;width:100%;min-width:1260px;font-size:14px}
+table{border-collapse:collapse;width:100%;min-width:1700px;font-size:14px}
 th{font:600 11px var(--f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--panel);position:sticky;top:0}
 td{padding:4px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
 tr:last-child td{border-bottom:0}
@@ -67,6 +67,8 @@ td.mono,td input.mono{font-family:var(--f-mono);font-variant-numeric:tabular-num
 td input{font:14px var(--f-body);border:1px solid transparent;background:transparent;color:var(--ink);padding:6px;border-radius:4px;width:100%;min-width:90px}
 td input:hover{border-color:var(--line)} td input:focus{border-color:var(--accent);background:var(--bg);outline:none}
 td input[data-f=mac]{min-width:170px}
+td input[data-f=apModel]{min-width:210px} td input[data-f=apMake]{min-width:120px} td input[data-f=pkid]{min-width:120px}
+td input.need{border-color:color-mix(in srgb,var(--warn) 60%,transparent);background:color-mix(in srgb,var(--warn) 6%,transparent)}
 td input[data-f=product]{min-width:125px} td input[data-f=serial]{min-width:115px} td input[data-f=built]{min-width:90px}
 .review{background:var(--panel);border:2px solid var(--warn);border-radius:8px;padding:12px;display:grid;gap:10px}
 .rvhead{display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap}
@@ -168,6 +170,7 @@ input[type=file]{display:none}
       <button class="btn" id="importBtn" type="button" title="Import a list exported from this page (.xlsx or .csv), or a scan history from a phone barcode app">Import list</button>
       <button class="btn" id="copyBtn" type="button">Copy for Excel</button>
       <button class="btn" id="csvBtn" type="button">CSV</button>
+      <button class="btn" id="pcBtn" type="button" title="Autopilot device upload for Partner Center: serial with hash, product key ID, or exact make and model">Partner Center CSV</button>
       <button class="btn primary" id="xlsxBtn" type="button">Export .xlsx</button>
       <button class="btn primary" id="mailBtn" type="button" title="Send the Excel list by email">Email list</button>
       <button class="btn danger" id="clearBtn" type="button">Clear all</button>
@@ -175,7 +178,7 @@ input[type=file]{display:none}
     <div class="tablewrap">
       <table>
         <thead><tr>
-          <th>#</th><th>Make</th><th>Serial / service tag</th><th>Part / MTM</th><th>Model</th><th>Built (est.)</th><th title="Years of parts / labour / on-site cover">Warranty</th><th title="From the vendor's warranty page: copy it and paste it here">Warranty end</th><th>MAC addresses</th>
+          <th>#</th><th>Make</th><th>Serial / service tag</th><th>Part / MTM</th><th>Model</th><th>Built (est.)</th><th title="Years of parts / labour / on-site cover">Warranty</th><th title="From the vendor's warranty page: copy it and paste it here">Warranty end</th><th>MAC addresses</th><th title="Manufacturer name exactly as Windows reports it (Win32_ComputerSystem.Manufacturer). Set once per part number.">Autopilot make</th><th title="Device model exactly as Windows reports it (Win32_ComputerSystem.Model). Set once per part number.">Autopilot model</th><th title="Windows Product Key ID (PKID) from the box, optional">Product key ID</th><th title="Hardware hash, imported from the build CSV">Hash</th>
           <th>Asset tag</th><th>Site</th><th>Room</th><th>Group tag</th><th>Notes</th><th>Check</th><th></th>
         </tr></thead>
         <tbody id="rows"></tbody>
@@ -195,6 +198,7 @@ input[type=file]{display:none}
       <li><b>Labels under tape</b>: when a photo's barcodes are hidden by tape or glare, the online page in Claude asks Claude to read the printed text (those rows are noted "Read by Claude from photo: check"). Anything still unread, and every such photo on the GitHub page, opens in <b>Finish this device</b> with the photo beside the fields so you can type the serial and part number from it.</li>
       <li><b>Several photos at once</b>: <b>Choose photos</b> picks any number from the gallery: long-press the first photo, then tap the rest. On a laptop, Ctrl-click or Shift-click several in the file window, or drag them onto the page. <b>Import list</b> accepts photos too, mixed with .xlsx/.csv files. Photos on a phone plugged into a PC by USB can only be picked one at a time (Windows treats the phone as a media device): copy them into a folder on the PC first, then use <b>Choose folder</b>, or open this page on the phone itself. iPhone HEIC photos only open in Safari; set Camera &gt; Formats &gt; Most Compatible if they are not read. Each photo is one label; photos of different labels on the same device merge into its row. <b>Take photo</b> opens the camera for a single shot.</li>
       <li><b>MAC addresses</b>: a device can have any number (LAN, Wi-Fi, Bluetooth, dock). Every MAC on a label or scanned after the serial is added to that row, separated by semicolons; type extra ones the same way. The export puts each in its own column (MAC 1, MAC 2, …).</li>
+      <li><b>Partner Center (Autopilot)</b>: <b>Partner Center CSV</b> exports the device upload file (Device Serial Number, Windows Product ID, Hardware Hash, Manufacturer name, Device model), split into files of 1,000. Each device goes by hardware hash if present, else product key ID, else make and model. Make and model must match what Windows reports exactly: boot one unit of each model and run <code>Get-CimInstance Win32_ComputerSystem | Select Manufacturer,Model</code>, then type the model into the Autopilot model cell of any device with that part number; every device with the same part number uses it, now and in later lists. Lenovo models fill in from the MTM automatically; the grey text is the label's model name as a hint only. Type <code>-</code> as the Autopilot model for monitors and other non-Windows kit to leave that part number out. Import the CSV from your build (Get-WindowsAutopilotInfo or OSDCloud) with <b>Import list</b> to add hashes and product key IDs by serial.</li>
       <li><b>Email list</b>: on a phone it opens the share sheet with the Excel file attached; pick your mail app. On a laptop it saves the file and opens a new email with the device list in the body, ready for you to attach the file. Set <b>Email list to</b> above to pre-fill the address.</li>
       <li><b>Phone or webcam</b>: <b>Live scan</b> opens the camera and adds each new code it sees, with a buzz and a green frame. It appears in the downloaded page when opened over https or from the PC's own disk; Claude's viewer does not allow live camera use, so inside Claude use <b>Take photo</b> or <b>Choose photos</b>.</li>
       <li>Understood formats: vendor support URLs (HP <code>?serialnumber=</code>, Dell <code>qrl.dell.com/&lt;tag&gt;</code>, Lenovo <code>pcsupport</code>), Lenovo <code>1S&lt;MTM&gt;&lt;serial&gt;</code> codes, ANSI/ISO box labels (<code>S</code> serial, <code>1P</code> part), GS1 <code>(21)</code> serials, labelled text (<code>S/N</code>, <code>Service Tag</code>, <code>MTM</code>, <code>P/N</code>, <code>VFY:</code>, <code>IMEI</code>, <code>MAC</code>), Apple part numbers (<code>…/A</code>), Samsung model codes, and HP's comma-separated QR (<code>serial,product,model,1y1y0y</code>, where the last part is years of parts/labour/on-site warranty) and HP box QR links (<code>hpsmart.com/QRC/…/21/&lt;serial&gt;?240=&lt;part&gt;</code>).</li>
@@ -486,6 +490,11 @@ function ingestMany(text,source){
 }
 const pbase=v=>(v||'').split('#')[0];
 // Two part numbers can belong to one device if they are the same SKU (with or without locale) or one is an HP spare/SSA number
+// Partner Center needs manufacturer and model exactly as the device reports them; set once per part number
+const AP_MAKE={HP:'HP',Dell:'Dell Inc.',Lenovo:'LENOVO',Microsoft:'Microsoft Corporation',Fujitsu:'FUJITSU',Apple:'Apple Inc.',Samsung:'SAMSUNG ELECTRONICS CO., LTD.',Acer:'Acer',ASUS:'ASUSTeK COMPUTER INC.',Getac:'GETAC',Panasonic:'Panasonic Corporation'};
+function apKey(r){ return (r.make||'')+'|'+pbase(r.product||''); }
+function apVals(r){ const m=(r.product&&(settings.apModels||{})[apKey(r)])||{};
+  return { make:r.apMake||m.make||AP_MAKE[r.make]||'', model:r.apModel||m.model||(r.make==='Lenovo'&&LEN_MTM.test(pbase(r.product||''))?pbase(r.product):'') }; }
 function prodCompat(a,b){ return !a||!b||pbase(a)===pbase(b)||SPARE.test(a)||SPARE.test(b); }
 function mergeInto(r,p){
   const patch={}, got=[], notes=[];
@@ -584,7 +593,7 @@ function parseCSV(t){ t=t.replace(/^﻿/,''); const out=[]; let row=[], f='', q=
     else f+=c; }
   if(f||row.length){ row.push(f); out.push(row); }
   return out.filter(r=>r.some(v=>String(v).trim())); }
-const IMPORT_COLS=[['make',/^(make|manufacturer|vendor|brand)$/i],['serial',/serial|^s\/?n$|service ?tag/i],['product',/part|mtm|product ?(no|number|#)|^p\/?n$|sku/i],
+const IMPORT_COLS=[['apMake',/manufacturer name|autopilot (make|manufacturer)/i],['apModel',/device model|autopilot model/i],['pkid',/product ?id|product key|pkid/i],['hash',/hardware ?hash/i],['make',/^(make|manufacturer|vendor|brand)$/i],['serial',/serial|^s\/?n$|service ?tag/i],['product',/part|mtm|product ?(no|number|#)|^p\/?n$|sku/i],
   ['model',/^model( name)?$/i],['built',/^built/i],['warranty',/^warranty/i],['mac',/^mac/i],['asset',/asset/i],['site',/^(site|school)/i],['room',/^(room|location)/i],
   ['tag',/group ?tag/i],['po',/^po\b|order/i],['notes',/^notes?$/i],['raw',/^raw|content|barcode|^text$|^data$/i]];
 function importTable(tb,name){
@@ -593,13 +602,14 @@ function importTable(tb,name){
   head.forEach((h,i)=>{ for(const [k,re] of IMPORT_COLS) if(!(k in map)&&re.test(h)){ map[k]=i; break; } });
   const macCols=head.map((h,i)=>/^mac/i.test(h)?i:-1).filter(i=>i>=0);
   // A device list (this page's export, or any sheet with a serial column): restore rows directly
-  if('serial' in map&&(('product' in map)||('make' in map)||('mac' in map))){
+  if('serial' in map&&['product','make','mac','hash','pkid','apModel'].some(k=>k in map)){
     const c={added:0,updated:0,dup:0,skipped:0};
     tb.slice(1).forEach(r=>{ const v=k=>k in map?String(r[map[k]]??'').trim():'';
       const serial=v('serial').toUpperCase(); if(!serial){ c.skipped++; return; }
       let model=v('model'), ai=false; if(/\s\(AI\)$/.test(model)){ model=model.replace(/\s\(AI\)$/,''); ai=true; }
       const rec={make:v('make'),serial,product:v('product').toUpperCase(),model,modelAi:ai,built:v('built'),warranty:v('warranty'),mac:joinMacs(macCols.map(i=>String(r[i]??''))),
-        asset:v('asset'),site:v('site'),room:v('room'),tag:v('tag'),po:v('po'),notes:v('notes'),raw:v('raw')};
+        asset:v('asset'),site:v('site'),room:v('room'),tag:v('tag'),po:v('po'),notes:v('notes'),raw:v('raw'),pkid:v('pkid'),hash:v('hash'),apMake:v('apMake'),apModel:v('apModel')};
+      if(rec.apMake&&rec.apMake===AP_MAKE[rec.make]) rec.apMake='';
       const ex=rows.find(x=>x.serial===serial);
       if(ex){ const patch={}; for(const k in rec) if(rec[k]&&!ex[k]&&k!=='modelAi'){ patch[k]=rec[k]; if(k==='model') patch.modelAi=ai; }
         if(rec.mac&&ex.mac){ const u=joinMacs([ex.mac,rec.mac]); if(u!==ex.mac) patch.mac=u; }
@@ -866,8 +876,8 @@ let setT=null;
 for(const k in dmap) $(dmap[k]).addEventListener('input',e=>{settings[k]=e.target.value;clearTimeout(setT);setT=setTimeout(store.saveSettings,500);});
 
 /* ---------- render ---------- */
-const COLS=['make','serial','product','model','built','warranty','wend','mac','asset','site','room','tag','notes'];
-const MONO=new Set(['serial','product','mac','asset','built','warranty','wend']);
+const COLS=['make','serial','product','model','built','warranty','wend','mac','apMake','apModel','pkid','hash','asset','site','room','tag','notes'];
+const MONO=new Set(['serial','product','mac','asset','built','warranty','wend','pkid']);
 function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function render(){
   const tb=$('#rows');
@@ -879,6 +889,9 @@ function render(){
     const pill=r.example?'<span class="pill ex">Example</span>':miss?'<span class="pill warn">Check</span>':'<span class="pill ok">OK</span>';
     const cells=COLS.map(k=>{
       if(k==='built') return '<td class="mono" style="white-space:nowrap">'+esc(r.built)+'</td>';
+      if(k==='hash') return '<td style="text-align:center">'+(r.hash?'<span class="pill ok" title="Hardware hash present">✓</span>':'')+'</td>';
+      if(k==='apMake'||k==='apModel'){ const v=apVals(r), val=k==='apMake'?v.make:v.model, ph=k==='apModel'&&!v.model&&r.model?r.model+' ?':'';
+        return '<td><input id="c_'+r.id+'_'+k+'" data-id="'+r.id+'" data-f="'+k+'" value="'+esc(val)+'" placeholder="'+esc(ph)+'" aria-label="'+k+' row '+(i+1)+'"'+(k==='apModel'&&!val&&!r.hash&&!r.pkid?' class="need"':'')+'></td>'; }
       const ai=k==='model'&&r.modelAi&&r.model?'<span class="ai" title="Suggested by Claude from the product number">AI</span>':'';
       return '<td'+(ai?' style="white-space:nowrap"':'')+'><input id="c_'+r.id+'_'+k+'" class="'+(MONO.has(k)?'mono':'')+'" data-id="'+r.id+'" data-f="'+k+'" value="'+esc(r[k])+'" aria-label="'+k+' row '+(i+1)+'"'+(ai?' style="width:calc(100% - 26px)"':'')+'>'+ai+'</td>';
     }).join('');
@@ -893,6 +906,10 @@ function render(){
 $('#rows').addEventListener('input',e=>{
   const el=e.target; if(!el.dataset.f) return;
   const k=el.dataset.f, id=el.dataset.id;
+  if(k==='apMake'||k==='apModel'){ const r=rows.find(x=>x.id===id); if(!r) return; const v=el.value.trim();
+    clearTimeout(el._t); el._t=setTimeout(()=>{ if(r.product){ const m=settings.apModels=settings.apModels||{}, key=apKey(r); m[key]=Object.assign({},m[key],{[k==='apMake'?'make':'model']:v}); store.saveSettings();
+        rows.filter(x=>apKey(x)===key&&x[k]).forEach(x=>store.update(x.id,{[k]:''})); const n=rows.filter(x=>apKey(x)===key).length; render(); if(n>1) say('Autopilot '+(k==='apMake'?'make':'model')+' set for all '+n+' devices with part '+r.product+'.','ok'); }
+      else { store.update(id,{[k]:v}); } },500); return; }
   let v=el.value; if(['serial','product'].includes(k)) {v=v.toUpperCase(); }
   const patch={[k]:v}; if(k==='serial'||k==='make'){const r=rows.find(x=>x.id===id)||{}; patch.built=buildEst(k==='serial'?v:r.serial,k==='make'?v:r.make);} if(k==='model') patch.modelAi=false; if(k==='serial') patch.snWeak=false;
   clearTimeout(el._t); el._t=setTimeout(()=>{store.update(id,patch); if(k==='serial'||k==='product'||k==='make') render();},400);
@@ -919,10 +936,10 @@ $('#clearBtn').addEventListener('click',e=>{
 });
 
 /* ---------- export ---------- */
-const HEAD0=[['make','Make'],['serial','Serial Number'],['product','Part / MTM'],['model','Model'],['built','Built (est.)'],['warranty','Warranty (parts/labour/on-site yrs)'],['wend','Warranty End'],['wstart','Warranty Start'],['wtype','Warranty Type'],['mac','MAC Address'],['asset','Asset Tag'],['site','Site'],['room','Room'],['tag','Group Tag'],['po','PO / Order Ref'],['notes','Notes'],['scanned','Scanned'],['raw','Raw QR Data']];
+const HEAD0=[['make','Make'],['serial','Serial Number'],['product','Part / MTM'],['model','Model'],['built','Built (est.)'],['warranty','Warranty (parts/labour/on-site yrs)'],['wend','Warranty End'],['wstart','Warranty Start'],['wtype','Warranty Type'],['mac','MAC Address'],['apMake','Autopilot Manufacturer'],['apModel','Autopilot Model'],['pkid','Windows Product ID'],['hash','Hardware Hash'],['asset','Asset Tag'],['site','Site'],['room','Room'],['tag','Group Tag'],['po','PO / Order Ref'],['notes','Notes'],['scanned','Scanned'],['raw','Raw QR Data']];
 function heads(){ const n=Math.max(1,...rows.map(r=>macList(r.mac).length)); const out=[];
   HEAD0.forEach(x=>{ if(x[0]==='mac') for(let i=1;i<=n;i++) out.push(['mac'+i,'MAC '+i]); else out.push(x); }); return out; }
-function table(){const H=heads();return rows.map(r=>{const o={}, ms=macList(r.mac);H.forEach(([k,h])=>{o[h]=/^mac\d+$/.test(k)?(ms[+k.slice(3)-1]||''):k==='scanned'?new Date(r.ts).toLocaleString('en-GB'):k==='model'&&r.modelAi&&r.model?r.model+' (AI)':(r[k]||'');});return o;});}
+function table(){const H=heads();return rows.map(r=>{const o={}, ms=macList(r.mac);const av=apVals(r);H.forEach(([k,h])=>{o[h]=k==='apMake'?av.make:k==='apModel'?av.model:/^mac\d+$/.test(k)?(ms[+k.slice(3)-1]||''):k==='scanned'?new Date(r.ts).toLocaleString('en-GB'):k==='model'&&r.modelAi&&r.model?r.model+' (AI)':(r[k]||'');});return o;});}
 function stamp(){const d=new Date();return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');}
 function fname(ext){const s=(settings.site||'devices').replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'');return 'Device-intake_'+s+'_'+stamp()+'.'+ext;}
 let dl=null; (async()=>{try{dl=await window.claude?.use?.('downloads');}catch(e){}})();
@@ -943,6 +960,7 @@ function buildXlsx(){
   // Autopilot-style sheet: serial plus group tag, for reconciliation against the hash import.
   const ap=XLSX.utils.json_to_sheet(rows.filter(r=>r.serial).map(r=>({'Device Serial Number':r.serial,'Manufacturer':r.make||'','Model':r.model||'','Group Tag':r.tag||'','Part / MTM':r.product||''})));
   XLSX.utils.book_append_sheet(wb,ap,'Autopilot check');
+  const pc=partnerCenterRows().ready; if(pc.length) XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([PC_HEAD,...pc]),'Partner Center');
   return XLSX.write(wb,{type:'array',bookType:'xlsx'});
 }
 $('#xlsxBtn').addEventListener('click',()=>{
@@ -968,6 +986,27 @@ $('#mailBtn').addEventListener('click',async()=>{
   say('Saved '+name+'. Attach it to '+(window.claude?'an email':'the email that just opened')+(to?' to '+to:'')+' (it is in your Downloads folder).','ok');
 });
 function csvCell(v){v=String(v??'');return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
+// ---- Partner Center Autopilot upload: hash, else product key ID, else manufacturer + model (the tuple) ----
+const PC_HEAD=['Device Serial Number','Windows Product ID','Hardware Hash','Manufacturer name','Device model'];
+function partnerCenterRows(){
+  const ready=[], missing={}, by={hash:0,pkid:0,tuple:0,skip:0};
+  rows.filter(r=>r.serial).forEach(r=>{ const v=apVals(r);
+    if(/^(-|n\/?a|none|not windows)$/i.test(v.model.trim())){ by.skip++; return; }
+    if(r.hash){ ready.push([r.serial,r.pkid||'',r.hash,'','']); by.hash++; }
+    else if(r.pkid){ ready.push([r.serial,r.pkid,'','','']); by.pkid++; }
+    else if(v.make&&v.model){ ready.push([r.serial,'','',v.make,v.model]); by.tuple++; }
+    else { const k=(r.make||'?')+' '+(r.product||'(no part no.)'); missing[k]=(missing[k]||0)+1; } });
+  return {ready,missing,by};
+}
+$('#pcBtn').addEventListener('click',async()=>{
+  if(!needRows()) return;
+  const {ready,missing,by}=partnerCenterRows(), miss=Object.entries(missing);
+  if(!ready.length){ say('No device is ready for Partner Center yet. Fill Autopilot model for: '+miss.map(([k,n])=>k+' ('+n+')').join(', ')+' (or type - for monitors and other non-Windows kit). Get it from one unit with (Get-CimInstance Win32_ComputerSystem).Model.','warn'); return; }
+  const parts=[]; for(let i=0;i<ready.length;i+=1000) parts.push(ready.slice(i,i+1000));
+  for(let i=0;i<parts.length;i++){ const name=fname('csv').replace('Device-intake_','PartnerCenter-Autopilot_').replace(/\.csv$/,parts.length>1?'_part'+(i+1)+'.csv':'.csv');
+    await save(name,[PC_HEAD.join(','),...parts[i].map(r=>r.map(csvCell).join(','))].join('\r\n')); }
+  say('Partner Center CSV: '+ready.length+' device'+(ready.length>1?'s':'')+' ('+by.tuple+' by make and model, '+by.pkid+' by product key ID, '+by.hash+' by hash)'+(parts.length>1?' in '+parts.length+' files of up to 1,000':'')+'.'+(by.skip?' '+by.skip+' marked not for Autopilot.':'')+(miss.length?' Left out, Autopilot model needed: '+miss.map(([k,n])=>k+' ('+n+')').join(', ')+' (type - for monitors and other non-Windows kit).':''),miss.length?'warn':'ok');
+});
 $('#csvBtn').addEventListener('click',()=>{
   if(!needRows()) return;
   const t=table(),h=heads().map(x=>x[1]);
@@ -975,7 +1014,7 @@ $('#csvBtn').addEventListener('click',()=>{
 });
 $('#copyBtn').addEventListener('click',()=>{
   if(!needRows()) return;
-  const t=table(),h=heads().map(x=>x[1]).filter(x=>x!=='Raw QR Data');
+  const t=table(),h=heads().map(x=>x[1]).filter(x=>x!=='Raw QR Data'&&x!=='Hardware Hash');
   const txt=[h.join('\t'),...t.map(o=>h.map(k=>String(o[k]).replace(/[\t\n]/g,' ')).join('\t'))].join('\n');
   try{navigator.clipboard.writeText(txt).then(()=>say('Copied '+rows.length+' rows. Paste into Excel.','ok'),()=>fallbackCopy(txt));}catch(e){fallbackCopy(txt);}
 });
